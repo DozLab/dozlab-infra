@@ -1,0 +1,179 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: lab-session-${SESSION_ID}
+  labels:
+    app: lab-environment
+    session-id: ${SESSION_ID}
+    user-id: ${USER_ID}
+spec:
+  initContainers:
+  # Calculate VM IP from pod IP
+  - name: ip-calculator
+    image: busybox
+    command:
+    - sh
+    - -c
+    - |
+      echo "Calculating VM IP from pod IP..."
+      POD_IP=$(hostname -i)
+      echo "Pod IP: $POD_IP"
+      
+      # Calculate VM IP (pod IP + 1)
+      VM_IP=$(echo $POD_IP | awk -F. '{$4=$4+1; print $1"."$2"."$3"."$4}')
+      echo "VM IP will be: $VM_IP"
+      
+      # Write to shared config
+      echo "POD_IP=$POD_IP" > /shared/network-config
+      echo "VM_IP=$VM_IP" >> /shared/network-config
+      
+      echo "Network configuration written to /shared/network-config"
+      cat /shared/network-config
+    volumeMounts:
+    - name: shared-config
+      mountPath: /shared
+
+  containers:
+  
+  # Main VM container (initrd/firecracker)
+  - name: initrd-vm
+    image: your-initrd:latest
+    securityContext:
+      privileged: true  # Required for VM/firecracker
+    resources:
+      limits:
+        memory: "4Gi"
+        cpu: "2"
+      requests:
+        memory: "3Gi" 
+        cpu: "1"
+    env:
+    - name: SESSION_ID
+      value: ${SESSION_ID}
+    - name: POD_IP
+      valueFrom:
+        fieldRef:
+          fieldPath: status.podIP
+    # Read VM IP from shared config or calculate
+    command:
+    - sh
+    - -c
+    - |
+      source /shared/network-config
+      export VM_IP=$VM_IP
+      echo "VM will use IP: $VM_IP"
+      # Start your initrd/firecracker process here
+      exec your-initrd-startup-script
+    ports:
+    - containerPort: 22
+      name: vm-ssh
+    volumeMounts:
+    - name: vm-data
+      mountPath: /vm-data
+    - name: shared-config
+      mountPath: /shared
+
+  # Terminal sidecar container
+  - name: terminal-sidecar
+    image: your-terminal-sidecar:latest
+    ports:
+    - containerPort: 8081
+      name: terminal
+    env:
+    - name: SESSION_ID
+      value: ${SESSION_ID}
+    - name: POD_IP
+      valueFrom:
+        fieldRef:
+          fieldPath: status.podIP
+    # Read VM IP from shared config
+    command:
+    - sh
+    - -c
+    - |
+      source /shared/network-config
+      export VM_IP=$VM_IP
+      echo "Terminal sidecar will connect to VM at: $VM_IP"
+      exec ./terminal-sidecar
+    resources:
+      limits:
+        memory: "512Mi"
+        cpu: "500m"
+      requests:
+        memory: "256Mi"
+        cpu: "250m"
+    volumeMounts:
+    - name: vm-data
+      mountPath: /vm-data
+      readOnly: true
+    - name: shared-config
+      mountPath: /shared
+
+  # VS Code container  
+  - name: code-server
+    image: codercom/code-server:latest
+    ports:
+    - containerPort: 8080
+      name: vscode
+    env:
+    - name: PASSWORD
+      value: ${VSCODE_PASSWORD}
+    - name: SESSION_ID
+      value: ${SESSION_ID}
+    - name: POD_IP
+      valueFrom:
+        fieldRef:
+          fieldPath: status.podIP
+    # Read VM IP from shared config
+    command:
+    - sh
+    - -c
+    - |
+      source /shared/network-config
+      export VM_IP=$VM_IP
+      echo "VS Code will connect to VM at: $VM_IP"
+      exec code-server --bind-addr 0.0.0.0:8080 --auth password
+    resources:
+      limits:
+        memory: "2Gi"
+        cpu: "1"
+      requests:
+        memory: "1Gi"
+        cpu: "500m"
+    volumeMounts:
+    - name: vscode-data
+      mountPath: /home/coder
+    - name: vm-data
+      mountPath: /workspace
+      readOnly: true
+    - name: shared-config
+      mountPath: /shared
+
+  volumes:
+  - name: vm-data
+    emptyDir: {}
+  - name: vscode-data
+    emptyDir: {}
+  - name: shared-config
+    emptyDir: {}
+
+  restartPolicy: Never
+  
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: lab-service-${SESSION_ID}
+spec:
+  selector:
+    session-id: ${SESSION_ID}
+  ports:
+  - name: vscode
+    port: 8080
+    targetPort: 8080
+  - name: terminal
+    port: 8081
+    targetPort: 8081
+  - name: vm-ssh
+    port: 22
+    targetPort: 22

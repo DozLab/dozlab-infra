@@ -1,0 +1,82 @@
+# Terraform
+*.tfstate
+*.tfstate.*
+*.tfplan
+*.tfplan.*
+.terraform/
+.terraform.lock.hcl
+terraform.tfvars
+terraform.tfvars.json
+
+# Helm
+*.tgz
+charts/*/charts/
+charts/*/requirements.lock
+
+# Kubernetes
+kubeconfig
+*.kubeconfig
+kustomization.yaml.bak
+
+# Secrets and sensitive files
+secrets/
+*.pem
+*.key
+*.crt
+*.cert
+*.p12
+*.pfx
+
+# Environment specific configs
+.env
+.env.local
+.env.*.local
+config.local.yaml
+values.local.yaml
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Log files
+*.log
+logs/
+
+# Temporary files
+tmp/
+temp/
+
+# Build artifacts
+build/
+dist/
+
+# Backup files
+*.bak
+*.backup
+*.old
+
+# CI/CD artifacts
+.github/workflows/*.log
+
+# Docker
+.dockerignore
+
+# Local development
+local/
+dev/
+
+# Monitoring and observability
+grafana/dashboards/*.json.bak
+prometheus/rules/*.yml.bak
+
+# Certificates
+certificates/
+ssl/
+tls/
