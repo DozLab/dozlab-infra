@@ -8,138 +8,198 @@ metadata:
     user-id: ${USER_ID}
 spec:
   initContainers:
-  # Calculate VM IP from pod IP
-  - name: ip-calculator
+  # Rootfs preparation using dozlab-init
+  - name: init-rootfs
+    image: dozman99/dozlab-init:latest
+    env:
+    - name: IMAGE_DOWNLOAD_URL
+      value: "${ROOTFS_IMAGE_URL}"  # URL to pre-built rootfs (dozlab-k8s.ext4 or dozlab-vm.ext4)
+    - name: IMAGE_SIZE
+      value: "${DISK_SIZE:-4G}"  # Default 4G, configurable
+    - name: IMAGE_PATH
+      value: "/srv/vm/kernels/rootfs.ext4"
+    volumeMounts:
+    - name: vm-kernels
+      mountPath: /srv/vm/kernels
+    resources:
+      limits:
+        memory: "256Mi"
+        cpu: "200m"
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+
+  # Network configuration calculator
+  - name: network-setup
     image: busybox
     command:
     - sh
     - -c
     - |
-      echo "Calculating VM IP from pod IP..."
+      echo "Configuring network for Firecracker VM..."
       POD_IP=$(hostname -i)
       echo "Pod IP: $POD_IP"
-      
-      # Calculate VM IP (pod IP + 1)
-      VM_IP=$(echo $POD_IP | awk -F. '{$4=$4+1; print $1"."$2"."$3"."$4}')
-      echo "VM IP will be: $VM_IP"
-      
-      # Write to shared config
-      echo "POD_IP=$POD_IP" > /shared/network-config
-      echo "VM_IP=$VM_IP" >> /shared/network-config
-      
+
+      # Network configuration for Firecracker
+      # VM will use 172.16.0.2, Gateway 172.16.0.1 (configured in Firecracker)
+      echo "GATEWAY_IP=172.16.0.1" > /shared/network-config
+      echo "VM_IP=172.16.0.2" >> /shared/network-config
+      echo "POD_IP=$POD_IP" >> /shared/network-config
+      echo "TAP_DEVICE=tap0" >> /shared/network-config
+
       echo "Network configuration written to /shared/network-config"
       cat /shared/network-config
     volumeMounts:
     - name: shared-config
       mountPath: /shared
-
-  containers:
-  
-  # Main VM container (initrd/firecracker)
-  - name: initrd-vm
-    image: your-initrd:latest
-    securityContext:
-      privileged: true  # Required for VM/firecracker
     resources:
       limits:
-        memory: "4Gi"
-        cpu: "2"
+        memory: "64Mi"
+        cpu: "100m"
       requests:
-        memory: "3Gi" 
-        cpu: "1"
+        memory: "32Mi"
+        cpu: "50m"
+
+  containers:
+
+  # Firecracker MicroVM container
+  - name: firecracker-vm
+    image: dozman99/dozlab-firecracker:latest  # Uses existing Dockerfile with updated Firecracker
+    securityContext:
+      # Use specific capabilities instead of privileged mode
+      capabilities:
+        add:
+        - NET_ADMIN      # Required for tap device and iptables
+        - SYS_ADMIN      # Required for mounting and VM operations
+        - SYS_RESOURCE   # Required for setting resource limits
+      # Remove privileged: true for better security
     env:
     - name: SESSION_ID
       value: ${SESSION_ID}
-    - name: POD_IP
-      valueFrom:
-        fieldRef:
-          fieldPath: status.podIP
-    # Read VM IP from shared config or calculate
-    command:
-    - sh
-    - -c
-    - |
-      source /shared/network-config
-      export VM_IP=$VM_IP
-      echo "VM will use IP: $VM_IP"
-      # Start your initrd/firecracker process here
-      exec your-initrd-startup-script
+    - name: ROOTFS_PATH
+      value: "/srv/vm/kernels/rootfs.ext4"
+    - name: KERNEL_PATH
+      value: "/find/vmlinux.bin"
+    - name: CPU_COUNT
+      value: "${VM_CPU:-1}"  # Default 1 CPU
+    - name: MEMORY
+      value: "${VM_MEMORY:-1024}"  # Default 1GB RAM
+    - name: GATEWAY_IP
+      value: "172.16.0.1"
+    - name: VM_IP
+      value: "172.16.0.2"
+    - name: TAP_DEVICE_NAME
+      value: "tap0"
     ports:
     - containerPort: 22
       name: vm-ssh
+      protocol: TCP
+    resources:
+      limits:
+        memory: "${VM_MEMORY_LIMIT:-2Gi}"  # Reduced from 4Gi
+        cpu: "${VM_CPU_LIMIT:-1500m}"      # Reduced from 2 cores
+      requests:
+        memory: "${VM_MEMORY_REQUEST:-1Gi}" # Reduced from 3Gi
+        cpu: "${VM_CPU_REQUEST:-500m}"      # Reduced from 1 core
     volumeMounts:
+    - name: vm-kernels
+      mountPath: /srv/vm/kernels
     - name: vm-data
       mountPath: /vm-data
     - name: shared-config
       mountPath: /shared
+      readOnly: true
+    livenessProbe:
+      tcpSocket:
+        port: 22
+      initialDelaySeconds: 30
+      periodSeconds: 10
+      timeoutSeconds: 5
+      failureThreshold: 3
+    readinessProbe:
+      tcpSocket:
+        port: 22
+      initialDelaySeconds: 20
+      periodSeconds: 5
+      timeoutSeconds: 3
 
   # Terminal sidecar container
   - name: terminal-sidecar
-    image: your-terminal-sidecar:latest
+    image: ${TERMINAL_IMAGE:-dozman99/dozlab-terminal:latest}
     ports:
     - containerPort: 8081
       name: terminal
+      protocol: TCP
     env:
     - name: SESSION_ID
       value: ${SESSION_ID}
-    - name: POD_IP
-      valueFrom:
-        fieldRef:
-          fieldPath: status.podIP
-    # Read VM IP from shared config
-    command:
-    - sh
-    - -c
-    - |
-      source /shared/network-config
-      export VM_IP=$VM_IP
-      echo "Terminal sidecar will connect to VM at: $VM_IP"
-      exec ./terminal-sidecar
+    - name: VM_IP
+      value: "172.16.0.2"
+    - name: VM_SSH_PORT
+      value: "22"
     resources:
       limits:
-        memory: "512Mi"
-        cpu: "500m"
+        memory: "256Mi"  # Reduced from 512Mi
+        cpu: "250m"      # Reduced from 500m
       requests:
-        memory: "256Mi"
-        cpu: "250m"
+        memory: "128Mi"  # Reduced from 256Mi
+        cpu: "100m"      # Reduced from 250m
     volumeMounts:
     - name: vm-data
       mountPath: /vm-data
       readOnly: true
     - name: shared-config
       mountPath: /shared
+      readOnly: true
+    livenessProbe:
+      httpGet:
+        path: /health
+        port: 8081
+      initialDelaySeconds: 10
+      periodSeconds: 10
+    readinessProbe:
+      httpGet:
+        path: /ready
+        port: 8081
+      initialDelaySeconds: 5
+      periodSeconds: 5
 
-  # VS Code container  
+  # VS Code Server container
   - name: code-server
     image: codercom/code-server:latest
     ports:
     - containerPort: 8080
       name: vscode
+      protocol: TCP
     env:
     - name: PASSWORD
-      value: ${VSCODE_PASSWORD}
+      valueFrom:
+        secretKeyRef:
+          name: lab-session-${SESSION_ID}-secrets
+          key: vscode-password
+          optional: false
     - name: SESSION_ID
       value: ${SESSION_ID}
-    - name: POD_IP
-      valueFrom:
-        fieldRef:
-          fieldPath: status.podIP
-    # Read VM IP from shared config
+    - name: DOCKER_HOST
+      value: "tcp://172.16.0.2:2375"  # Connect to Docker in VM if available
     command:
     - sh
     - -c
     - |
-      source /shared/network-config
-      export VM_IP=$VM_IP
-      echo "VS Code will connect to VM at: $VM_IP"
-      exec code-server --bind-addr 0.0.0.0:8080 --auth password
+      # Start code-server with security headers
+      exec code-server \
+        --bind-addr 0.0.0.0:8080 \
+        --auth password \
+        --disable-telemetry \
+        --disable-update-check \
+        /workspace
     resources:
       limits:
-        memory: "2Gi"
-        cpu: "1"
+        memory: "1Gi"    # Reduced from 2Gi
+        cpu: "500m"      # Reduced from 1 core
       requests:
-        memory: "1Gi"
-        cpu: "500m"
+        memory: "512Mi"  # Reduced from 1Gi
+        cpu: "250m"      # Reduced from 500m
     volumeMounts:
     - name: vscode-data
       mountPath: /home/coder
@@ -148,32 +208,87 @@ spec:
       readOnly: true
     - name: shared-config
       mountPath: /shared
+      readOnly: true
+    livenessProbe:
+      httpGet:
+        path: /healthz
+        port: 8080
+      initialDelaySeconds: 30
+      periodSeconds: 10
+    readinessProbe:
+      httpGet:
+        path: /healthz
+        port: 8080
+      initialDelaySeconds: 15
+      periodSeconds: 5
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 1000
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: false
 
   volumes:
+  # Kernel and rootfs storage
+  - name: vm-kernels
+    emptyDir:
+      sizeLimit: "${KERNEL_SIZE_LIMIT:-2Gi}"  # Limit kernel/rootfs storage
+
+  # VM working data
   - name: vm-data
-    emptyDir: {}
+    emptyDir:
+      sizeLimit: "${VM_DATA_SIZE_LIMIT:-5Gi}"  # Limit VM data storage
+
+  # VS Code configuration and extensions
   - name: vscode-data
-    emptyDir: {}
+    emptyDir:
+      sizeLimit: "${VSCODE_DATA_SIZE_LIMIT:-1Gi}"  # Limit VS Code data
+
+  # Shared configuration between containers
   - name: shared-config
-    emptyDir: {}
+    emptyDir:
+      sizeLimit: "10Mi"  # Small size for config files
 
   restartPolicy: Never
-  
+
+  # Pod-level security context
+  securityContext:
+    fsGroup: 1000
+    runAsNonRoot: false  # Firecracker requires root
+    seccompProfile:
+      type: RuntimeDefault
+
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: lab-service-${SESSION_ID}
+  labels:
+    app: lab-environment
+    session-id: ${SESSION_ID}
 spec:
   selector:
     session-id: ${SESSION_ID}
+  type: ClusterIP
   ports:
   - name: vscode
     port: 8080
     targetPort: 8080
+    protocol: TCP
   - name: terminal
     port: 8081
     targetPort: 8081
+    protocol: TCP
   - name: vm-ssh
     port: 22
     targetPort: 22
+    protocol: TCP
+
+---
+# Secret for VS Code password (should be created separately)
+apiVersion: v1
+kind: Secret
+metadata:
+  name: lab-session-${SESSION_ID}-secrets
+type: Opaque
+stringData:
+  vscode-password: "${VSCODE_PASSWORD}"  # Should be generated securely
