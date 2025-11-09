@@ -1,0 +1,214 @@
+# Dozlab Session Configuration
+#
+# This Helm chart deploys an interactive lab environment with:
+# - Firecracker microVM running a full Linux OS with Docker daemon
+# - Web-based terminal for SSH access to the VM
+# - VS Code Server for in-browser development
+#
+# IMPORTANT: All volumes use emptyDir (ephemeral storage)
+# ⚠️  ALL DATA WILL BE LOST WHEN THE POD TERMINATES ⚠️
+# This is intentional for temporary lab sessions. If you need persistence,
+# modify the volume definitions to use PersistentVolumeClaims.
+
+# Session Configuration
+session:
+  # Unique identifier for this lab session (REQUIRED)
+  # Used for pod naming, labels, and resource identification
+  id: "example-session-123"
+
+  # User identifier for tracking and access control
+  userId: "user-456"
+
+# Additional labels to apply to all resources
+labels: {}
+  # team: platform
+  # environment: production
+
+# Rootfs Configuration
+# The rootfs image MUST include:
+# ✓ Docker daemon configured to listen on 0.0.0.0:2375 (or tcp socket)
+# ✓ SSH server enabled and configured
+# ✓ Network configuration supporting static IP assignment
+# ✓ Required tools and dependencies for your lab exercises
+#
+# Available pre-built images from dozlab-rootfs-manager:
+# - dozlab-k8s.ext4: Includes Kubernetes tools (kubectl, k3s, etc.)
+# - dozlab-vm.ext4: General purpose development environment
+rootfs:
+  # URL to download the pre-built rootfs image (REQUIRED)
+  # Example: "https://storage.googleapis.com/your-bucket/dozlab-k8s.ext4"
+  imageUrl: "https://example.com/dozlab-k8s.ext4"
+
+  # Disk size for the rootfs (default: 4G)
+  # Ensure this matches or exceeds the downloaded image size
+  diskSize: "4G"
+
+# Network Configuration
+# The Firecracker VM uses a private network (172.16.0.0/24) with NAT
+network:
+  # Gateway IP for the TAP device (must be in 172.16.0.0/24)
+  gatewayIp: "172.16.0.1"
+
+  # VM IP address (must be in 172.16.0.0/24, not .1)
+  vmIp: "172.16.0.2"
+
+  # TAP device name
+  tapDevice: "tap0"
+
+# Init Containers
+initContainers:
+  # Rootfs preparation container
+  # Downloads and prepares the rootfs image from dozlab-rootfs-manager
+  rootfs:
+    image: "dozman99/init-setup"
+    tag: "latest"
+    resources:
+      limits:
+        memory: "256Mi"
+        cpu: "200m"
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+
+  # Network configuration container
+  network:
+    image: "busybox"
+    tag: "latest"
+    resources:
+      limits:
+        memory: "64Mi"
+        cpu: "100m"
+      requests:
+        memory: "32Mi"
+        cpu: "50m"
+
+# Firecracker MicroVM Configuration
+firecracker:
+  image: "dozman99/dozlab-firecracker"
+  tag: "latest"
+
+  # VM specifications
+  vm:
+    # Number of vCPUs for the VM
+    cpuCount: "1"
+
+    # Memory in MB for the VM
+    memory: "1024"
+
+  # Container resource limits
+  resources:
+    limits:
+      memory: "2Gi"
+      cpu: "1500m"
+    requests:
+      memory: "1Gi"
+      cpu: "500m"
+
+  # Health check configuration
+  livenessProbe:
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+
+  readinessProbe:
+    initialDelaySeconds: 20
+    periodSeconds: 5
+    timeoutSeconds: 3
+
+# Terminal Sidecar Configuration
+# Provides web-based SSH access to the Firecracker VM
+terminal:
+  image: "dozman99/dozlab-terminal"
+  tag: "latest"
+
+  resources:
+    limits:
+      memory: "256Mi"
+      cpu: "250m"
+    requests:
+      memory: "128Mi"
+      cpu: "100m"
+
+  livenessProbe:
+    path: "/health"
+    initialDelaySeconds: 10
+    periodSeconds: 10
+
+  readinessProbe:
+    path: "/ready"
+    initialDelaySeconds: 5
+    periodSeconds: 5
+
+# VS Code Server Configuration
+codeServer:
+  image: "codercom/code-server"
+  tag: "latest"
+
+  # Password for VS Code access (REQUIRED)
+  # Generate securely: openssl rand -base64 32
+  password: "CHANGE-ME-INSECURE-PASSWORD"
+
+  # Set to false to allow editing files in the workspace
+  # Set to true for read-only access
+  workspaceReadOnly: false
+
+  resources:
+    limits:
+      memory: "1Gi"
+      cpu: "500m"
+    requests:
+      memory: "512Mi"
+      cpu: "250m"
+
+  livenessProbe:
+    path: "/healthz"
+    initialDelaySeconds: 30
+    periodSeconds: 10
+
+  readinessProbe:
+    path: "/healthz"
+    initialDelaySeconds: 15
+    periodSeconds: 5
+
+# Service Configuration
+service:
+  # Service type: ClusterIP, NodePort, or LoadBalancer
+  type: ClusterIP
+
+  ports:
+    vscode: 8080
+    terminal: 8081
+    ssh: 22
+
+# Volume Configuration
+# ⚠️  WARNING: All volumes are ephemeral (emptyDir) ⚠️
+# Data will be PERMANENTLY LOST when the pod terminates.
+# This includes:
+# - VM filesystem changes
+# - Files created in VS Code
+# - VS Code extensions and settings
+# - All user data
+#
+# For production use, consider using PersistentVolumeClaims instead.
+volumes:
+  # Kernel and rootfs storage
+  kernels:
+    sizeLimit: "2Gi"
+
+  # VM working data (files, docker images, etc.)
+  vmData:
+    sizeLimit: "5Gi"
+
+  # VS Code extensions and configuration
+  vscodeData:
+    sizeLimit: "1Gi"
+
+  # Shared configuration files
+  sharedConfig:
+    sizeLimit: "10Mi"
+
+# Pod restart policy
+# Never: Pod will not restart after completion
+# OnFailure: Pod will restart only if it fails
+restartPolicy: Never

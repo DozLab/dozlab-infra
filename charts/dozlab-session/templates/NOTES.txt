@@ -1,0 +1,48 @@
+🚀 Dozlab Session {{ .Values.session.id }} has been deployed!
+
+⚠️  IMPORTANT: This session uses EPHEMERAL STORAGE ⚠️
+All data will be PERMANENTLY LOST when the pod terminates.
+
+📋 Session Details:
+  Session ID: {{ .Values.session.id }}
+  User ID:    {{ .Values.session.userId }}
+
+🔧 Services:
+  VS Code Server: lab-service-{{ .Values.session.id }}:{{ .Values.service.ports.vscode }}
+  Terminal:       lab-service-{{ .Values.session.id }}:{{ .Values.service.ports.terminal }}
+  VM SSH:         lab-service-{{ .Values.session.id }}:{{ .Values.service.ports.ssh }}
+
+🖥️  Firecracker VM Configuration:
+  VM IP:      {{ .Values.network.vmIp }}
+  Gateway:    {{ .Values.network.gatewayIp }}
+  CPUs:       {{ .Values.firecracker.vm.cpuCount }}
+  Memory:     {{ .Values.firecracker.vm.memory }}MB
+
+📦 Rootfs Image:
+  Source: {{ .Values.rootfs.imageUrl }}
+  Size:   {{ .Values.rootfs.diskSize }}
+
+  Required features in rootfs:
+  ✓ Docker daemon listening on tcp://0.0.0.0:2375
+  ✓ SSH server enabled
+  ✓ Network configuration support
+
+🔐 Access Information:
+  VS Code Password: {{ .Values.codeServer.password }}
+
+📊 To check the status of your session:
+  kubectl get pod lab-session-{{ .Values.session.id }}
+  kubectl logs lab-session-{{ .Values.session.id }} -c firecracker-vm
+  kubectl logs lab-session-{{ .Values.session.id }} -c terminal-sidecar
+
+🔗 To access services (if using port-forward):
+  kubectl port-forward lab-session-{{ .Values.session.id }} 8080:8080 8081:8081
+
+  Then open in your browser:
+  - VS Code: http://localhost:8080
+  - Terminal: http://localhost:8081
+
+🗑️  To delete this session:
+  helm uninstall {{ .Release.Name }}
+
+For more information, visit: https://github.com/DozLab/dozlab-infra

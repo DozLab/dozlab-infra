@@ -1,0 +1,18 @@
+apiVersion: v2
+name: dozlab-session
+description: A Helm chart for Dozlab interactive lab sessions with Firecracker microVM and development tools
+type: application
+version: 0.1.0
+appVersion: "1.0"
+keywords:
+  - firecracker
+  - microvm
+  - lab
+  - vscode
+  - terminal
+maintainers:
+  - name: Dozlab Team
+home: https://github.com/DozLab/dozlab-infra
+sources:
+  - https://github.com/DozLab/dozlab-infra
+  - https://github.com/DozLab/dozlab-rootfs-manager

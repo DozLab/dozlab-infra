@@ -1,0 +1,15 @@
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: GitRepository
+metadata:
+  name: dozlab-infra
+  namespace: flux-system
+spec:
+  # Update this to your actual repository URL
+  url: https://github.com/DozLab/dozlab-infra
+  ref:
+    branch: main
+  interval: 1m
+  # Optional: Use this for private repositories
+  # secretRef:
+  #   name: git-credentials
