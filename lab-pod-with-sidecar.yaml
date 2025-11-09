@@ -1,3 +1,29 @@
+# ============================================================================
+# Dozlab Lab Session - Kubernetes Pod Template
+# ============================================================================
+# This manifest creates an interactive lab environment with:
+# - Firecracker microVM running inside a Docker container
+# - Web-based terminal for SSH access to the VM
+# - VS Code Server for browser-based development
+#
+# ARCHITECTURE:
+#   Docker Container (firecracker-vm)
+#     └─> Firecracker MicroVM (172.16.0.2)
+#         ├─> Full Linux OS with rootfs.ext4
+#         ├─> Docker daemon on tcp://0.0.0.0:2375
+#         └─> SSH server on port 22
+#
+# DEPLOYMENT:
+#   Use Kubernetes API to create these resources programmatically
+#   Replace ${VARIABLES} with actual values in your code
+#
+# ⚠️  IMPORTANT: EPHEMERAL STORAGE WARNING ⚠️
+#   All volumes use emptyDir (ephemeral storage)
+#   ALL DATA WILL BE PERMANENTLY LOST when the pod terminates
+#   This includes: VM filesystem, Docker images, VS Code extensions, user files
+#
+# ============================================================================
+
 apiVersion: v1
 kind: Pod
 metadata:
@@ -8,8 +34,23 @@ metadata:
     user-id: ${USER_ID}
 spec:
   initContainers:
-  # Rootfs preparation using init-setup from dozlab-rootfs-manager
+  # ----------------------------------------------------------------------------
+  # Init Container 1: Rootfs Preparation
+  # ----------------------------------------------------------------------------
+  # Downloads and prepares the rootfs image using dozlab-rootfs-manager
   # https://github.com/DozLab/dozlab-rootfs-manager/tree/main/init-setup
+  #
+  # ROOTFS REQUIREMENTS:
+  # The rootfs image specified in ROOTFS_IMAGE_URL MUST include:
+  #   ✓ Docker daemon configured to listen on tcp://0.0.0.0:2375
+  #   ✓ SSH server enabled and running on boot
+  #   ✓ Network configuration supporting static IP (172.16.0.2)
+  #   ✓ Required tools and dependencies for your lab exercises
+  #
+  # Available pre-built images:
+  #   - dozlab-k8s.ext4: Includes Kubernetes tools (kubectl, k3s, kind, etc.)
+  #   - dozlab-vm.ext4: General purpose development environment
+  # ----------------------------------------------------------------------------
   - name: init-rootfs
     image: dozman99/init-setup:latest
     env:
@@ -30,7 +71,12 @@ spec:
         memory: "128Mi"
         cpu: "100m"
 
-  # Network configuration calculator
+  # ----------------------------------------------------------------------------
+  # Init Container 2: Network Configuration
+  # ----------------------------------------------------------------------------
+  # Calculates and writes network configuration for the Firecracker VM
+  # VM uses private network: 172.16.0.2/24 with gateway at 172.16.0.1
+  # ----------------------------------------------------------------------------
   - name: network-setup
     image: busybox
     command:
@@ -63,7 +109,14 @@ spec:
 
   containers:
 
-  # Firecracker MicroVM container
+  # ============================================================================
+  # Main Container 1: Firecracker MicroVM
+  # ============================================================================
+  # Runs Firecracker inside a Docker container to provide a lightweight VM
+  # The VM has its own Linux OS, Docker daemon, and SSH server
+  # Kernel: /find/vmlinux.bin (set by Dockerfile WORKDIR)
+  # Rootfs: /srv/vm/kernels/rootfs.ext4 (downloaded by init-rootfs)
+  # ============================================================================
   - name: firecracker-vm
     image: dozman99/dozlab-firecracker:latest  # Uses existing Dockerfile with updated Firecracker
     securityContext:
@@ -124,7 +177,12 @@ spec:
       periodSeconds: 5
       timeoutSeconds: 3
 
-  # Terminal sidecar container
+  # ============================================================================
+  # Main Container 2: Terminal Sidecar
+  # ============================================================================
+  # Provides web-based SSH terminal access to the Firecracker VM
+  # Connects to VM at 172.16.0.2:22
+  # ============================================================================
   - name: terminal-sidecar
     image: ${TERMINAL_IMAGE:-dozman99/dozlab-terminal:latest}
     ports:
@@ -165,7 +223,13 @@ spec:
       initialDelaySeconds: 5
       periodSeconds: 5
 
-  # VS Code Server container
+  # ============================================================================
+  # Main Container 3: VS Code Server
+  # ============================================================================
+  # Provides browser-based VS Code IDE for development
+  # Pre-configured to connect to Docker daemon in the VM via DOCKER_HOST
+  # This allows running Docker commands directly from VS Code terminal
+  # ============================================================================
   - name: code-server
     image: codercom/code-server:latest
     ports:
@@ -182,7 +246,7 @@ spec:
     - name: SESSION_ID
       value: ${SESSION_ID}
     - name: DOCKER_HOST
-      value: "tcp://172.16.0.2:2375"  # Connect to Docker in VM if available
+      value: "tcp://172.16.0.2:2375"  # Connect to Docker daemon running in the VM
     command:
     - sh
     - -c
@@ -206,7 +270,8 @@ spec:
       mountPath: /home/coder
     - name: vm-data
       mountPath: /workspace
-      readOnly: true
+      # FIXED: Changed from readOnly: true to allow editing files in VS Code
+      readOnly: false
     - name: shared-config
       mountPath: /shared
       readOnly: true
@@ -228,26 +293,36 @@ spec:
       allowPrivilegeEscalation: false
       readOnlyRootFilesystem: false
 
+  # ============================================================================
+  # Volumes - EPHEMERAL STORAGE WARNING
+  # ============================================================================
+  # ⚠️  ALL VOLUMES USE emptyDir (EPHEMERAL STORAGE) ⚠️
+  #
+  # This means ALL DATA WILL BE PERMANENTLY LOST when the pod terminates:
+  #   - VM filesystem changes
+  #   - Docker images and containers created in the VM
+  #   - Files created/edited in VS Code
+  #   - VS Code extensions and settings
+  #
+  # This is intentional for temporary lab sessions. If you need persistence,
+  # replace emptyDir with persistentVolumeClaim in your Kubernetes API code.
+  # ============================================================================
   volumes:
-  # Kernel and rootfs storage
   - name: vm-kernels
     emptyDir:
-      sizeLimit: "${KERNEL_SIZE_LIMIT:-2Gi}"  # Limit kernel/rootfs storage
+      sizeLimit: "${KERNEL_SIZE_LIMIT:-2Gi}"  # Kernel and rootfs storage
 
-  # VM working data
   - name: vm-data
     emptyDir:
-      sizeLimit: "${VM_DATA_SIZE_LIMIT:-5Gi}"  # Limit VM data storage
+      sizeLimit: "${VM_DATA_SIZE_LIMIT:-5Gi}"  # VM working data (EPHEMERAL)
 
-  # VS Code configuration and extensions
   - name: vscode-data
     emptyDir:
-      sizeLimit: "${VSCODE_DATA_SIZE_LIMIT:-1Gi}"  # Limit VS Code data
+      sizeLimit: "${VSCODE_DATA_SIZE_LIMIT:-1Gi}"  # VS Code config/extensions (EPHEMERAL)
 
-  # Shared configuration between containers
   - name: shared-config
     emptyDir:
-      sizeLimit: "10Mi"  # Small size for config files
+      sizeLimit: "10Mi"  # Shared configuration files
 
   restartPolicy: Never
 
@@ -285,11 +360,16 @@ spec:
     protocol: TCP
 
 ---
-# Secret for VS Code password (should be created separately)
+# ============================================================================
+# Secret - VS Code Password
+# ============================================================================
+# Stores the password for VS Code Server access
+# Should be generated securely (e.g., random 32-character string)
+# ============================================================================
 apiVersion: v1
 kind: Secret
 metadata:
   name: lab-session-${SESSION_ID}-secrets
 type: Opaque
 stringData:
-  vscode-password: "${VSCODE_PASSWORD}"  # Should be generated securely
+  vscode-password: "${VSCODE_PASSWORD}"  # Generate: openssl rand -base64 32
