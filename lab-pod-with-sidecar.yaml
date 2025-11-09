@@ -8,9 +8,10 @@ metadata:
     user-id: ${USER_ID}
 spec:
   initContainers:
-  # Rootfs preparation using dozlab-init
+  # Rootfs preparation using init-setup from dozlab-rootfs-manager
+  # https://github.com/DozLab/dozlab-rootfs-manager/tree/main/init-setup
   - name: init-rootfs
-    image: dozman99/dozlab-init:latest
+    image: dozman99/init-setup:latest
     env:
     - name: IMAGE_DOWNLOAD_URL
       value: "${ROOTFS_IMAGE_URL}"  # URL to pre-built rootfs (dozlab-k8s.ext4 or dozlab-vm.ext4)
