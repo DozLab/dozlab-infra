@@ -370,7 +370,7 @@ These variables should be substituted when creating the pod:
 | `${VM_CPU_LIMIT}` | `1500m` | Firecracker container CPU limit |
 | `${VM_MEMORY_REQUEST}` | `1Gi` | Firecracker container memory request |
 | `${VM_CPU_REQUEST}` | `500m` | Firecracker container CPU request |
-| `${KERNEL_SIZE_LIMIT}` | `2Gi` | vm-kernels volume size |
+| `${KERNEL_SIZE_LIMIT}` | `8Gi` | vm-kernels volume size; must exceed `${DISK_SIZE}` |
 | `${VM_DATA_SIZE_LIMIT}` | `5Gi` | vm-data volume size |
 | `${VSCODE_DATA_SIZE_LIMIT}` | `1Gi` | vscode-data volume size |
 
