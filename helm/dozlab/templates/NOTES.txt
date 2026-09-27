@@ -1,0 +1,11 @@
+DozLab {{ .Chart.AppVersion }} (chart {{ .Chart.Version }}) is installed in namespace {{ .Release.Namespace }}.
+{{- if .Values.api.enabled }}
+
+API: kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "dozlab.fullname" . }}-api 8080:{{ .Values.api.service.port }}
+     curl localhost:8080/health
+{{- end }}
+{{- if .Values.controller.enabled }}
+
+Lab sessions are created in namespace {{ .Values.labSessions.namespace }}. It needs the Secret
+{{ .Values.controller.labPod.sshKeySecret }} (key {{ .Values.controller.labPod.sshKeySecretKey }}) with the VM SSH private key.
+{{- end }}

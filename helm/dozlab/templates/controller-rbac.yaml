@@ -1,0 +1,79 @@
+{{- if .Values.controller.enabled }}
+{{- $c := dict "ctx" $ "component" "controller" }}
+{{- if .Values.controller.serviceAccount.create }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "dozlab.serviceAccountName" $c }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "dozlab.componentLabels" $c | nindent 4 }}
+---
+{{- end }}
+# Lab sessions can be in any namespace, so the controller needs cluster-wide access.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "dozlab.componentName" $c }}
+  labels:
+    {{- include "dozlab.componentLabels" $c | nindent 4 }}
+rules:
+- apiGroups: [""]
+  resources: ["pods", "services", "persistentvolumeclaims"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+- apiGroups: [""]
+  resources: ["events"]
+  verbs: ["create", "patch"]
+- apiGroups: ["dozlab.io"]
+  resources: ["labsessions"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+- apiGroups: ["dozlab.io"]
+  resources: ["labsessions/status", "labsessions/finalizers"]
+  verbs: ["get", "update", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "dozlab.componentName" $c }}
+  labels:
+    {{- include "dozlab.componentLabels" $c | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "dozlab.componentName" $c }}
+subjects:
+- kind: ServiceAccount
+  name: {{ include "dozlab.serviceAccountName" $c }}
+  namespace: {{ .Release.Namespace }}
+{{- if .Values.controller.leaderElect }}
+---
+# Leader election only needs leases in the controller's own namespace.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "dozlab.componentName" $c }}-leader-election
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "dozlab.componentLabels" $c | nindent 4 }}
+rules:
+- apiGroups: ["coordination.k8s.io"]
+  resources: ["leases"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "dozlab.componentName" $c }}-leader-election
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "dozlab.componentLabels" $c | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "dozlab.componentName" $c }}-leader-election
+subjects:
+- kind: ServiceAccount
+  name: {{ include "dozlab.serviceAccountName" $c }}
+  namespace: {{ .Release.Namespace }}
+{{- end }}
+{{- end }}

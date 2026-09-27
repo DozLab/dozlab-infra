@@ -1,0 +1,110 @@
+name: Helm chart
+
+# PRs and main: lint + validate the chart. Tag chart-v<version>: package it, push it to
+# GHCR as an OCI artifact and attach it to a GitHub release. See helm/dozlab/README.md.
+on:
+  pull_request:
+    paths:
+      - helm/**
+      - crd-definition.yaml
+      - .github/workflows/helm-chart.yml
+  push:
+    branches: [main]
+    paths:
+      - helm/**
+      - crd-definition.yaml
+      - .github/workflows/helm-chart.yml
+    tags: ['chart-v*']
+
+permissions:
+  contents: read
+
+env:
+  CHART_DIR: helm/dozlab
+  HELM_VERSION: v3.15.4
+  KUBECONFORM_VERSION: v0.6.7
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: azure/setup-helm@v4
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      - name: CRD copy matches crd-definition.yaml
+        run: diff -u crd-definition.yaml "$CHART_DIR/files/labsessions.dozlab.io.yaml"
+
+      - name: Chart version bumped
+        if: github.event_name == 'pull_request'
+        run: |
+          base="origin/${{ github.base_ref }}"
+          if git diff --quiet "$base"...HEAD -- "$CHART_DIR" crd-definition.yaml; then
+            echo "chart unchanged"; exit 0
+          fi
+          old=$(git show "$base:$CHART_DIR/Chart.yaml" 2>/dev/null | sed -n 's/^version: *//p' || true)
+          new=$(sed -n 's/^version: *//p' "$CHART_DIR/Chart.yaml")
+          echo "base=$old head=$new"
+          if [ -n "$old" ] && [ "$old" = "$new" ]; then
+            echo "::error file=$CHART_DIR/Chart.yaml::chart changed but version is still $new; bump it"
+            exit 1
+          fi
+
+      - name: helm lint
+        run: helm lint --strict "$CHART_DIR" -f "$CHART_DIR/ci/test-values.yaml"
+
+      - name: Render and validate with kubeconform
+        run: |
+          curl -sSfL "https://github.com/yannh/kubeconform/releases/download/${KUBECONFORM_VERSION}/kubeconform-linux-amd64.tar.gz" \
+            | tar -xz -C /usr/local/bin kubeconform
+          helm template dozlab "$CHART_DIR" -n dozlab-system -f "$CHART_DIR/ci/test-values.yaml" \
+            | kubeconform -strict -summary -kubernetes-version 1.28.0 -ignore-missing-schemas
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/chart-v')
+    needs: lint
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # GitHub release
+      packages: write   # push the chart to GHCR
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/setup-helm@v4
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      - name: Tag matches Chart.yaml version
+        id: version
+        run: |
+          version=$(sed -n 's/^version: *//p' "$CHART_DIR/Chart.yaml")
+          if [ "$GITHUB_REF_NAME" != "chart-v$version" ]; then
+            echo "::error::tag $GITHUB_REF_NAME does not match Chart.yaml version $version"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Package
+        run: helm package "$CHART_DIR" -d dist
+
+      - name: Push to GHCR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          echo "$GH_TOKEN" | helm registry login ghcr.io -u "${{ github.actor }}" --password-stdin
+          helm push "dist/dozlab-${{ steps.version.outputs.version }}.tgz" "oci://ghcr.io/${owner}/charts"
+
+      - name: GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          gh release create "$GITHUB_REF_NAME" "dist/dozlab-${{ steps.version.outputs.version }}.tgz" \
+            --title "dozlab chart ${{ steps.version.outputs.version }}" \
+            --generate-notes \
+            --notes "helm install dozlab oci://ghcr.io/${owner}/charts/dozlab --version ${{ steps.version.outputs.version }}"
