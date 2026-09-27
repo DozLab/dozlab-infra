@@ -1,0 +1,103 @@
+# RabbitMQ for the DozLab event bus (dozlab-api RABBITMQ_URL), local cluster.
+#
+# Single replica, data on a local-path PVC. Credentials come from the Secret
+# `rabbitmq-credentials` (keys: username, password), which is NOT in this file:
+# create it before applying (see README "RabbitMQ").
+#
+# In-cluster URL: amqp://<username>:<password>@rabbitmq.dozlab.svc.cluster.local:5672/
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: dozlab
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rabbitmq
+  namespace: dozlab
+  labels:
+    app: rabbitmq
+spec:
+  selector:
+    app: rabbitmq
+  ports:
+  - name: amqp
+    port: 5672
+    targetPort: amqp
+  - name: management
+    port: 15672
+    targetPort: management
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: rabbitmq
+  namespace: dozlab
+  labels:
+    app: rabbitmq
+spec:
+  serviceName: rabbitmq
+  replicas: 1
+  selector:
+    matchLabels:
+      app: rabbitmq
+  template:
+    metadata:
+      labels:
+        app: rabbitmq
+    spec:
+      terminationGracePeriodSeconds: 60
+      securityContext:
+        fsGroup: 999   # the image's rabbitmq user; makes the PVC writable
+      containers:
+      - name: rabbitmq
+        image: rabbitmq:3-management
+        ports:
+        - name: amqp
+          containerPort: 5672
+        - name: management
+          containerPort: 15672
+        env:
+        # Stable node name so the data directory is reused after a restart
+        - name: RABBITMQ_NODENAME
+          value: rabbit@localhost
+        - name: RABBITMQ_DEFAULT_USER
+          valueFrom:
+            secretKeyRef:
+              name: rabbitmq-credentials
+              key: username
+        - name: RABBITMQ_DEFAULT_PASS
+          valueFrom:
+            secretKeyRef:
+              name: rabbitmq-credentials
+              key: password
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            memory: 1Gi   # RabbitMQ sizes its memory watermark from the cgroup limit
+        readinessProbe:
+          exec:
+            command: [rabbitmq-diagnostics, -q, check_port_connectivity]
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 10
+        livenessProbe:
+          exec:
+            command: [rabbitmq-diagnostics, -q, ping]
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 15
+        volumeMounts:
+        - name: data
+          mountPath: /var/lib/rabbitmq
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+    spec:
+      accessModes: [ReadWriteOnce]
+      storageClassName: local-path
+      resources:
+        requests:
+          storage: 2Gi

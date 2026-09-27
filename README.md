@@ -185,6 +185,51 @@ kubectl apply -k k8s/overlays/staging/
 kubectl apply -k k8s/overlays/production/
 ```
 
+### RabbitMQ (event bus)
+
+`rabbitmq.yaml` runs RabbitMQ for dozlab-api's event bus on the local cluster: namespace
+`dozlab`, a single-replica StatefulSet (`rabbitmq:3-management`) with its data on a
+`local-path` PVC (2Gi), and a Service `rabbitmq` (AMQP 5672, management UI 15672).
+
+The credentials are not in the manifest. Create the Secret first; a generated password
+never touches a file or the repo:
+
+```bash
+kubectl create namespace dozlab --dry-run=client -o yaml | kubectl apply -f -
+kubectl -n dozlab create secret generic rabbitmq-credentials \
+  --from-literal=username=dozlab \
+  --from-literal=password="$(openssl rand -base64 24)"
+```
+
+Apply it and wait until it is ready:
+
+```bash
+kubectl apply -f rabbitmq.yaml
+kubectl -n dozlab rollout status statefulset/rabbitmq
+kubectl -n dozlab exec rabbitmq-0 -- rabbitmq-diagnostics -q check_port_connectivity
+```
+
+Point dozlab-api at it (the API also needs `RABBITMQ_PREFETCH`, `RABBITMQ_MAX_RETRIES` and
+`RABBITMQ_RETRY_DELAY` only if you want non-default values):
+
+```bash
+RABBITMQ_URL=amqp://dozlab:<password>@rabbitmq.dozlab.svc.cluster.local:5672/
+# read the password back with:
+kubectl -n dozlab get secret rabbitmq-credentials -o jsonpath='{.data.password}' | base64 -d
+```
+
+Management UI: `kubectl -n dozlab port-forward svc/rabbitmq 15672` and open
+http://localhost:15672.
+
+Notes:
+
+- The user and password in the Secret are only applied when the data volume is first
+  initialised. To change them later, use `rabbitmqctl` inside the pod (or delete the PVC,
+  which deletes all queued messages).
+- `RABBITMQ_NODENAME` is fixed to `rabbit@localhost` so the data directory is reused when
+  the pod is recreated.
+- Deleting the StatefulSet keeps the PVC `data-rabbitmq-0`; delete it explicitly to wipe the data.
+
 ## Scripts
 
 ### Deployment Script (`scripts/deploy.sh`)
