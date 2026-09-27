@@ -96,12 +96,18 @@ spec:
       name: vm-ssh
       protocol: TCP
     resources:
+      # dozlab.io/kvm gives the container /dev/kvm (Firecracker) and dozlab.io/tun gives
+      # /dev/net/tun (tap device), via a device plugin; no privileged mode needed.
       limits:
         memory: "${VM_MEMORY_LIMIT:-2Gi}"  # Reduced from 4Gi
         cpu: "${VM_CPU_LIMIT:-1500m}"      # Reduced from 2 cores
+        dozlab.io/kvm: 1
+        dozlab.io/tun: 1
       requests:
         memory: "${VM_MEMORY_REQUEST:-1Gi}" # Reduced from 3Gi
         cpu: "${VM_CPU_REQUEST:-500m}"      # Reduced from 1 core
+        dozlab.io/kvm: 1
+        dozlab.io/tun: 1
     volumeMounts:
     - name: vm-kernels
       mountPath: /srv/vm/kernels
@@ -232,7 +238,7 @@ spec:
   # Kernel and rootfs storage
   - name: vm-kernels
     emptyDir:
-      sizeLimit: "${KERNEL_SIZE_LIMIT:-2Gi}"  # Limit kernel/rootfs storage
+      sizeLimit: "${KERNEL_SIZE_LIMIT:-8Gi}"  # Holds the rootfs: must exceed DISK_SIZE (4G)
 
   # VM working data
   - name: vm-data
@@ -255,6 +261,11 @@ spec:
   securityContext:
     fsGroup: 1000
     runAsNonRoot: false  # Firecracker requires root
+    # start-firecracker.sh NATs the VM; /proc/sys is read-only in the container.
+    # The kubelet must allow it: --allowed-unsafe-sysctls=net.ipv4.ip_forward
+    sysctls:
+    - name: net.ipv4.ip_forward
+      value: "1"
     seccompProfile:
       type: RuntimeDefault
 

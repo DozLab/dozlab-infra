@@ -4,6 +4,7 @@ RUN apk --no-cache add \
     bash \
     curl \
     iproute2 \
+    iptables \
     libc6-compat
 
 WORKDIR /find
