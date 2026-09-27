@@ -1,0 +1,104 @@
+# Default values for the dozlab chart.
+# Everything installs into the release namespace (helm install -n <ns> --create-namespace).
+
+nameOverride: ""
+fullnameOverride: ""
+
+imagePullSecrets: []
+
+crds:
+  # Install/upgrade the LabSession CRD with the chart. The CRD is kept on
+  # `helm uninstall` (helm.sh/resource-policy: keep) so LabSessions aren't deleted.
+  install: true
+
+# Namespace the API creates LabSessions in. dozlab-api hard-codes "default" today;
+# this only sets where the API's RBAC is granted.
+labSessions:
+  namespace: default
+
+controller:
+  enabled: true
+  replicaCount: 3
+  image:
+    repository: ghcr.io/dozlab/dozlab-controller
+    # Defaults to the chart appVersion.
+    tag: ""
+    pullPolicy: IfNotPresent
+  leaderElect: true
+  maxConcurrentReconciles: 10
+  syncPeriod: 10m
+  cacheSyncTimeout: 2m
+  gracefulShutdownTimeout: 30s
+  # Lab pod settings (see dozlab-controller README "Lab pod settings").
+  labPod:
+    vmImage: ""          # required: Firecracker image (dozlab-infra)
+    initImage: ""        # required: rootfs init image (dozlab-rootfs-manager init-setup)
+    terminalImage: ""    # required: terminal sidecar image (dozlab-terminal-sidecar)
+    sshKeySecret: lab-ssh-key
+    sshKeySecretKey: id_ed25519
+    sshUser: root
+    vmDiskSize: 4Gi
+    # StorageClass for session PVCs; empty uses the cluster default.
+    storageClass: ""
+  # Secret with key `url` (amqp://...) for publishing LabSession phase changes.
+  # Optional: without it the controller doesn't publish.
+  rabbitmqSecret: dozlab-controller-rabbitmq
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  podAnnotations: {}
+  serviceAccount:
+    create: true
+    name: ""
+
+api:
+  enabled: true
+  replicaCount: 2
+  image:
+    repository: ghcr.io/dozlab/dozlab-api
+    tag: ""
+    pullPolicy: IfNotPresent
+  port: 8080
+  # Non-secret settings, passed as env vars.
+  env:
+    DB_HOST: postgres
+    DB_PORT: "5432"
+    DB_NAME: dozlab
+    DB_USER: dozlab
+    REDIS_HOST: redis
+    REDIS_PORT: "6379"
+    GIN_MODE: release
+  # Required: an existing Secret loaded with envFrom. It must hold DB_PASSWORD,
+  # JWT_SECRET and RABBITMQ_URL, and may hold REDIS_PASSWORD. The chart never
+  # creates credentials.
+  existingSecret: dozlab-api
+  service:
+    type: ClusterIP
+    port: 80
+  ingress:
+    enabled: false
+    className: ""
+    annotations: {}
+    host: api.dozlab.local
+    tls: []
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: "1"
+      memory: 512Mi
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  podAnnotations: {}
+  serviceAccount:
+    create: true
+    name: ""

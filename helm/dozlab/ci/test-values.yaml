@@ -1,0 +1,11 @@
+# Values used by CI (helm lint / template / kubeconform). Not for real installs.
+controller:
+  labPod:
+    vmImage: ghcr.io/dozlab/dozlab-firecracker:ci
+    initImage: ghcr.io/dozlab/dozlab-init:ci
+    terminalImage: ghcr.io/dozlab/dozlab-terminal:ci
+    storageClass: local-path
+api:
+  ingress:
+    enabled: true
+    className: traefik

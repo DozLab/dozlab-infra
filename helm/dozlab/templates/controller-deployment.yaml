@@ -1,0 +1,141 @@
+{{- if .Values.controller.enabled }}
+{{- $c := dict "ctx" $ "component" "controller" }}
+{{- $v := .Values.controller }}
+{{- $lp := required "controller.labPod is required" $v.labPod }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "dozlab.componentName" $c }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "dozlab.componentLabels" $c | nindent 4 }}
+spec:
+  replicas: {{ $v.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "dozlab.selectorLabels" $c | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "dozlab.selectorLabels" $c | nindent 8 }}
+      {{- with $v.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      serviceAccountName: {{ include "dozlab.serviceAccountName" $c }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        runAsNonRoot: true
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: controller
+        image: {{ include "dozlab.image" $c }}
+        imagePullPolicy: {{ $v.image.pullPolicy }}
+        args:
+        - --leader-elect={{ $v.leaderElect }}
+        - --metrics-bind-address=:8080
+        - --health-probe-bind-address=:8081
+        - --max-concurrent-reconciles={{ $v.maxConcurrentReconciles }}
+        - --sync-period={{ $v.syncPeriod }}
+        - --cache-sync-timeout={{ $v.cacheSyncTimeout }}
+        - --graceful-shutdown-timeout={{ $v.gracefulShutdownTimeout }}
+        env:
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: DOZLAB_VM_IMAGE
+          value: {{ required "controller.labPod.vmImage is required" $lp.vmImage | quote }}
+        - name: DOZLAB_INIT_IMAGE
+          value: {{ required "controller.labPod.initImage is required" $lp.initImage | quote }}
+        - name: DOZLAB_TERMINAL_IMAGE
+          value: {{ required "controller.labPod.terminalImage is required" $lp.terminalImage | quote }}
+        - name: DOZLAB_SSH_KEY_SECRET
+          value: {{ $lp.sshKeySecret | quote }}
+        - name: DOZLAB_SSH_KEY_SECRET_KEY
+          value: {{ $lp.sshKeySecretKey | quote }}
+        - name: DOZLAB_SSH_USER
+          value: {{ $lp.sshUser | quote }}
+        - name: DOZLAB_VM_DISK_SIZE
+          value: {{ $lp.vmDiskSize | quote }}
+        {{- with $lp.storageClass }}
+        - name: DOZLAB_STORAGE_CLASS
+          value: {{ . | quote }}
+        {{- end }}
+        {{- with $v.rabbitmqSecret }}
+        - name: RABBITMQ_URL
+          valueFrom:
+            secretKeyRef:
+              name: {{ . }}
+              key: url
+              optional: true
+        {{- end }}
+        ports:
+        - name: metrics
+          containerPort: 8080
+        - name: health
+          containerPort: 8081
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: health
+          initialDelaySeconds: 15
+          periodSeconds: 20
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: health
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        resources:
+          {{- toYaml $v.resources | nindent 10 }}
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop: ["ALL"]
+      {{- with $v.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $v.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      affinity:
+      {{- if $v.affinity }}
+        {{- toYaml $v.affinity | nindent 8 }}
+      {{- else }}
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              topologyKey: kubernetes.io/hostname
+              labelSelector:
+                matchLabels:
+                  {{- include "dozlab.selectorLabels" $c | nindent 18 }}
+      {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "dozlab.componentName" $c }}-metrics
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "dozlab.componentLabels" $c | nindent 4 }}
+spec:
+  selector:
+    {{- include "dozlab.selectorLabels" $c | nindent 4 }}
+  ports:
+  - name: metrics
+    port: 8080
+    targetPort: metrics
+{{- end }}

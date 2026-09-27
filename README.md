@@ -302,51 +302,17 @@ patchesStrategicMerge:
 
 ### Dozlab Chart (`helm/dozlab/`)
 
-Complete Helm chart for Dozlab deployment:
-
-```yaml
-# helm/dozlab/values.yaml
-api:
-  image:
-    repository: dozlab/api
-    tag: latest
-  replicas: 3
-  resources:
-    requests:
-      cpu: 500m
-      memory: 1Gi
-    limits:
-      cpu: 2
-      memory: 4Gi
-
-controller:
-  image:
-    repository: dozlab/controller
-    tag: latest
-  replicas: 1
-
-database:
-  enabled: true
-  host: postgres
-  name: dozlab
-
-redis:
-  enabled: true
-  host: redis
-```
-
-### Installation
+Installs the LabSession CRD, dozlab-controller and dozlab-api. Postgres, Redis and RabbitMQ are
+not part of the chart; the API points at existing ones. Values, prerequisites and the release
+flow are in [`helm/dozlab/README.md`](helm/dozlab/README.md).
 
 ```bash
-# Add Helm repo (if hosted)
-helm repo add dozlab https://helm.dozlab.io
-
-# Install chart
-helm install dozlab dozlab/dozlab \
-  --namespace dozlab-system \
-  --create-namespace \
-  --values values.yaml
+helm install dozlab oci://ghcr.io/dozlab/charts/dozlab --version <version> \
+  --namespace dozlab-system --create-namespace -f my-values.yaml
 ```
+
+Releases: bump `version` in `helm/dozlab/Chart.yaml`, merge, then push the tag
+`chart-v<version>`. `.github/workflows/helm-chart.yml` publishes the chart to GHCR.
 
 ## Monitoring and Observability
 

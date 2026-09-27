@@ -1,0 +1,41 @@
+{{- if .Values.api.enabled }}
+{{- $c := dict "ctx" $ "component" "api" }}
+{{- if .Values.api.serviceAccount.create }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "dozlab.serviceAccountName" $c }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "dozlab.componentLabels" $c | nindent 4 }}
+---
+{{- end }}
+# The API creates, reads and deletes LabSessions in labSessions.namespace only.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "dozlab.componentName" $c }}-labsessions
+  namespace: {{ .Values.labSessions.namespace }}
+  labels:
+    {{- include "dozlab.componentLabels" $c | nindent 4 }}
+rules:
+- apiGroups: ["dozlab.io"]
+  resources: ["labsessions"]
+  verbs: ["get", "create", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "dozlab.componentName" $c }}-labsessions
+  namespace: {{ .Values.labSessions.namespace }}
+  labels:
+    {{- include "dozlab.componentLabels" $c | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "dozlab.componentName" $c }}-labsessions
+subjects:
+- kind: ServiceAccount
+  name: {{ include "dozlab.serviceAccountName" $c }}
+  namespace: {{ .Release.Namespace }}
+{{- end }}

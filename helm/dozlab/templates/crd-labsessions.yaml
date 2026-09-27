@@ -1,0 +1,7 @@
+{{- if .Values.crds.install }}
+{{- /* Single source: files/labsessions.dozlab.io.yaml (CI checks it matches crd-definition.yaml). */}}
+{{- $crd := .Files.Get "files/labsessions.dozlab.io.yaml" | fromYaml }}
+{{- $_ := set $crd.metadata "annotations" (dict "helm.sh/resource-policy" "keep") }}
+{{- $_ := set $crd.metadata "labels" (include "dozlab.labels" . | fromYaml) }}
+{{ toYaml $crd }}
+{{- end }}
