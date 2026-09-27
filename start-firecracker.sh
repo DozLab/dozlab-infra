@@ -6,6 +6,8 @@
 : ${GATEWAY_IP="172.16.0.1"}
 : ${VM_IP="172.16.0.2"}
 : ${TAP_DEVICE_NAME="tap0"}
+# Ports served by sidecars in this pod (code-server, terminal) that must NOT be forwarded into the VM
+: ${POD_LOCAL_PORTS="8080 8081"}
 
 : ${CPU_COUNT="1"}
 : ${MEMORY="1024"}
@@ -45,6 +47,10 @@ function setupNetworking() {
   iptables -I FORWARD 1 -i $TAP_DEVICE_NAME -j ACCEPT
   iptables -I FORWARD 1 -o $TAP_DEVICE_NAME -m state --state RELATED,ESTABLISHED -j ACCEPT
 
+  # Everything sent to the pod IP goes to the VM, except the sidecars' own ports.
+  for port in $POD_LOCAL_PORTS; do
+    iptables -t nat -A PREROUTING -d $NETWORK_IP -p tcp --dport $port -j RETURN
+  done
   iptables -t nat -A PREROUTING -d $NETWORK_IP -j DNAT --to-destination $VM_IP
 
   echo "Networking"
@@ -61,7 +67,7 @@ function loadKernel() {
     -H 'Content-Type: application/json'     \
     -d "{
           \"kernel_image_path\": \"${KERNEL_PATH}\",
-          \"boot_args\": \"console=ttyS0 reboot=k panic=1 pci=off\"
+          \"boot_args\": \"console=ttyS0 reboot=k panic=1 pci=off random.trust_cpu=on\"
     }"
 }
 
