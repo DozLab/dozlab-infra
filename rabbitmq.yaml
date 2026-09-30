@@ -49,6 +49,15 @@ spec:
       terminationGracePeriodSeconds: 60
       securityContext:
         fsGroup: 999   # the image's rabbitmq user; makes the PVC writable
+      initContainers:
+      # RabbitMQ exits unless .erlang.cookie is readable by its owner only; fsGroup left it
+      # 0660 and the pod crash-looped. Skipped on the first start, before the cookie exists.
+      - name: chmod-cookie
+        image: busybox:1.38.0@sha256:fd7dc98638c8e305f4dc34e979f1c0fdfdcaeb0fbf8fcff77ae834b6da3d7e6e
+        command: [sh, -c, 'if [ -f /var/lib/rabbitmq/.erlang.cookie ]; then chmod 600 /var/lib/rabbitmq/.erlang.cookie; fi']
+        volumeMounts:
+        - name: data
+          mountPath: /var/lib/rabbitmq
       containers:
       - name: rabbitmq
         image: rabbitmq:3-management
