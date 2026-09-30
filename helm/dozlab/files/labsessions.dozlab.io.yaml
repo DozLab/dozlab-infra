@@ -54,6 +54,20 @@ spec:
                 type: string
                 default: "2h"
                 description: "Session timeout duration"
+              customImages:
+                type: object
+                description: "Per-session image overrides; empty fields use the controller's defaults"
+                properties:
+                  initImage:
+                    type: string
+                    description: "Init container with the lab's VM rootfs (the lab's dozlab-init-<lab> image)"
+                  initrdImage:
+                    type: string
+                    description: "Firecracker VM image"
+                  terminalImage:
+                    type: string
+                  vscodeImage:
+                    type: string
           status:
             type: object
             properties:
