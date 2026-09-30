@@ -34,8 +34,6 @@ controller:
     vmImage: ""          # required: Firecracker image (dozlab-infra)
     initImage: ""        # required: rootfs init image (dozlab-rootfs-manager init-setup)
     terminalImage: ""    # required: terminal sidecar image (dozlab-terminal-sidecar)
-    sshKeySecret: lab-ssh-key
-    sshKeySecretKey: id_ed25519
     sshUser: root
     vmDiskSize: 4Gi
     # StorageClass for session PVCs; empty uses the cluster default.

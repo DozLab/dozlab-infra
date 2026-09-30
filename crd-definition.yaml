@@ -54,6 +54,13 @@ spec:
                 type: string
                 default: "2h"
                 description: "Session timeout duration"
+              customImages:
+                type: object
+                description: "The lab's own images"
+                properties:
+                  initImage:
+                    type: string
+                    description: "Init container with the lab's VM rootfs (the lab's dozlab-init-<lab> image); empty uses the controller's default"
           status:
             type: object
             properties:
