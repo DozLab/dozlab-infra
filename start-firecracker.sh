@@ -104,7 +104,7 @@ function loadMachineConfig() {
     -d "{
         \"vcpu_count\": ${CPU_COUNT},
         \"mem_size_mib\": ${MEMORY},
-        \"ht_enabled\": false
+        \"smt\": false
     }"
 }
 
@@ -157,7 +157,10 @@ function loadSnapshot() {
     -H  'Content-Type: application/json' \
     -d "{
             \"snapshot_path\": \"${SNAPSHOT_PATH}\",
-            \"mem_file_path\": \"${MEM_FILE_PATH}\"
+            \"mem_backend\": {
+                \"backend_type\": \"File\",
+                \"backend_path\": \"${MEM_FILE_PATH}\"
+            }
         }"
 }
 
