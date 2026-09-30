@@ -46,6 +46,11 @@ function setupNetworking() {
   iptables -t nat -A POSTROUTING -o $iface -j MASQUERADE
   iptables -I FORWARD 1 -i $TAP_DEVICE_NAME -j ACCEPT
   iptables -I FORWARD 1 -o $TAP_DEVICE_NAME -m state --state RELATED,ESTABLISHED -j ACCEPT
+  # The pod network's MTU can be smaller than the VM's 1500 (flannel's VXLAN on k3s: 1450), and
+  # the VM never learns it: large packets from outside (TLS handshakes, image layers) are
+  # dropped, so HTTPS to some hosts hangs. Clamp the MSS of forwarded TCP SYNs to the path MTU
+  # so both ends send segments that fit.
+  iptables -t mangle -A FORWARD -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu
 
   # Everything sent to the pod IP goes to the VM, except the sidecars' own ports.
   for port in $POD_LOCAL_PORTS; do
