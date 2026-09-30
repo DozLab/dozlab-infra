@@ -21,6 +21,10 @@ rules:
 - apiGroups: [""]
   resources: ["pods", "services", "persistentvolumeclaims"]
   verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+# Per-session SSH key Secrets (lab-session-<id>-ssh): create only, never read back
+- apiGroups: [""]
+  resources: ["secrets"]
+  verbs: ["create"]
 - apiGroups: [""]
   resources: ["events"]
   verbs: ["create", "patch"]

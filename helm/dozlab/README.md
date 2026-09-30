@@ -19,7 +19,6 @@ Postgres, Redis and RabbitMQ are **not** installed; the API points at existing o
 - Redis and RabbitMQ
 - Secrets, which the chart never creates:
   - `dozlab-api` in the release namespace: `DB_PASSWORD`, `JWT_SECRET`, `RABBITMQ_URL`, optionally `REDIS_PASSWORD`
-  - `lab-ssh-key` (key `id_ed25519`) in the lab sessions namespace (`default`): the VM SSH private key
   - optional `dozlab-controller-rabbitmq` (key `url`) in the release namespace: turns on LabSession phase events
 - Published images. The controller and API default to `ghcr.io/dozlab/dozlab-controller` and
   `ghcr.io/dozlab/dozlab-api` with the chart's `appVersion` as tag. **CI doesn't publish either image
@@ -62,7 +61,6 @@ api:
 | `controller.labPod.vmImage` | **required** | Firecracker image (dozlab-infra) |
 | `controller.labPod.initImage` | **required** | Rootfs init image (dozlab-rootfs-manager `init-setup`) |
 | `controller.labPod.terminalImage` | **required** | Terminal sidecar image |
-| `controller.labPod.sshKeySecret` / `.sshKeySecretKey` | `lab-ssh-key` / `id_ed25519` | Secret with the VM SSH key |
 | `controller.labPod.sshUser` | `root` | User the terminal sidecar logs in as |
 | `controller.labPod.vmDiskSize` | `4Gi` | Size the VM rootfs is grown to |
 | `controller.labPod.storageClass` | `""` | StorageClass for session PVCs; empty uses the cluster default |

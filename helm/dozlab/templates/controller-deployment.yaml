@@ -58,10 +58,6 @@ spec:
           value: {{ required "controller.labPod.initImage is required" $lp.initImage | quote }}
         - name: DOZLAB_TERMINAL_IMAGE
           value: {{ required "controller.labPod.terminalImage is required" $lp.terminalImage | quote }}
-        - name: DOZLAB_SSH_KEY_SECRET
-          value: {{ $lp.sshKeySecret | quote }}
-        - name: DOZLAB_SSH_KEY_SECRET_KEY
-          value: {{ $lp.sshKeySecretKey | quote }}
         - name: DOZLAB_SSH_USER
           value: {{ $lp.sshUser | quote }}
         - name: DOZLAB_VM_DISK_SIZE
