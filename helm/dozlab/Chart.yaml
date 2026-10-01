@@ -3,7 +3,7 @@ name: dozlab
 description: DozLab platform - LabSession CRD, lab controller and API
 type: application
 # Chart version: bump on every chart change (SemVer). The release tag is chart-v<version>.
-version: 0.2.0
+version: 0.3.0
 # App version: default image tag for the controller and API.
 appVersion: "0.1.0"
 kubeVersion: ">=1.28.0-0"
