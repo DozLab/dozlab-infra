@@ -147,6 +147,7 @@ securityContext:
 **Environment Variables**:
 ```yaml
 ROOTFS_PATH: "/srv/vm/kernels/rootfs.ext4"  # Prepared by init-rootfs
+WRITABLE_DISK_PATH: ""                      # Optional: the session's writable disk; makes ROOTFS_PATH a read-only base
 KERNEL_PATH: "/find/vmlinux.bin"            # Embedded in container
 CPU_COUNT: "1"                               # Configurable
 MEMORY: "1024"                               # Configurable (MB)

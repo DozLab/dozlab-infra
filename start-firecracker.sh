@@ -12,6 +12,19 @@
 : ${CPU_COUNT="1"}
 : ${MEMORY="1024"}
 
+# Per-session writable disk (dozlab-api docs/decision.md, option A). When set, ROOTFS_PATH is the
+# shared base and is attached read-only; the VM's overlay-init (rootfs-manager labs/vm_lab) puts
+# this disk (/dev/vdb) over it, so every change lands here. Unset: one read-write rootfs, as
+# before, so init images without overlay-init still boot.
+: ${WRITABLE_DISK_PATH=""}
+
+BOOT_ARGS="console=ttyS0 reboot=k panic=1 pci=off random.trust_cpu=on"
+ROOTFS_READ_ONLY=false
+if [ -n "$WRITABLE_DISK_PATH" ]; then
+  BOOT_ARGS="$BOOT_ARGS init=/sbin/overlay-init"
+  ROOTFS_READ_ONLY=true
+fi
+
 NETWORK_IP=""
 
 if [ -z "$ROOTFS_PATH" ]
@@ -72,7 +85,7 @@ function loadKernel() {
     -H 'Content-Type: application/json'     \
     -d "{
           \"kernel_image_path\": \"${KERNEL_PATH}\",
-          \"boot_args\": \"console=ttyS0 reboot=k panic=1 pci=off random.trust_cpu=on\"
+          \"boot_args\": \"${BOOT_ARGS}\"
     }"
 }
 
@@ -85,6 +98,19 @@ function loadRootFs() {
           \"drive_id\": \"rootfs\",
           \"path_on_host\": \"${ROOTFS_PATH}\",
           \"is_root_device\": true,
+          \"is_read_only\": ${ROOTFS_READ_ONLY}
+    }"
+}
+
+function loadWritableDisk() {
+  curl -s --unix-socket ${SOCKET_PATH} -i \
+    -X PUT 'http://localhost/drives/writable' \
+    -H 'Accept: application/json'            \
+    -H 'Content-Type: application/json'      \
+    -d "{
+          \"drive_id\": \"writable\",
+          \"path_on_host\": \"${WRITABLE_DISK_PATH}\",
+          \"is_root_device\": false,
           \"is_read_only\": false
     }"
 }
@@ -180,6 +206,9 @@ function startFirecrackerServer() {
 function startFromImage() {
   loadKernel
   loadRootFs
+  if [ -n "$WRITABLE_DISK_PATH" ]; then
+    loadWritableDisk
+  fi
   loadMachineConfig
   loadNetworkDevice
   startVM
@@ -242,6 +271,9 @@ TAP_DEVICE_MAC=$(genMAC)
 echo "Staring firecracker..."
 echo "Using kernel : ${KERNEL_PATH}"
 echo "Using root drive : ${ROOTFS_PATH}"
+if [ -n "$WRITABLE_DISK_PATH" ]; then
+  echo "Using writable disk : ${WRITABLE_DISK_PATH} (root drive read-only)"
+fi
 
 
 trap handleStop INT
