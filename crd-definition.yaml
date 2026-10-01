@@ -119,6 +119,22 @@ spec:
                 type: integer
                 format: int64
                 description: "Generation of the spec the controller last acted on"
+              usage:
+                type: object
+                description: "What the session's VM holds in the cluster right now"
+                properties:
+                  running:
+                    type: boolean
+                    description: "True while the VM's pod exists and hasn't finished, so it holds its CPU and memory"
+                  cpuRequest:
+                    type: string
+                    description: "CPU the pod's containers reserve, summed (e.g. 850m); empty when not running"
+                  memoryRequest:
+                    type: string
+                    description: "Memory the pod's containers reserve, summed (e.g. 1920Mi); empty when not running"
+                  storage:
+                    type: string
+                    description: "Total of the session's volume claims (e.g. 6Gi), held until the session is deleted"
               conditions:
                 type: array
                 items:
