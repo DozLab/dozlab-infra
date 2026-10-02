@@ -1,0 +1,105 @@
+# PostgreSQL for dozlab-api (the app database and the audit store), local cluster.
+#
+# Single replica, data on a local-path PVC. The data belongs to the PVC, not to the pod or to
+# any script: restarting the pod, re-applying this file or deleting the StatefulSet keeps it.
+# Only deleting the PVC `data-postgres-0` (or the namespace) deletes it, because the local-path
+# StorageClass has reclaim policy Delete.
+#
+# The superuser password comes from the Secret `postgres-credentials` (key: password), which is
+# NOT in this file: create it before applying (see README "PostgreSQL"). The image only uses it
+# the first time, when it creates the data.
+#
+# This file creates the empty database `dozlab`. dozlab-api does not run migrations: apply
+# dozlab-api/internal/database/migrations (dozlab-api's scripts/e2e-timing.sh up does it).
+#
+# In-cluster address: postgres.dozlab.svc.cluster.local:5432
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: dozlab
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: dozlab
+  labels:
+    app: postgres
+spec:
+  selector:
+    app: postgres
+  ports:
+  - name: postgres
+    port: 5432
+    targetPort: postgres
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  namespace: dozlab
+  labels:
+    app: postgres
+spec:
+  serviceName: postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      terminationGracePeriodSeconds: 60
+      securityContext:
+        fsGroup: 70   # the alpine image's postgres user; makes the PVC writable
+      containers:
+      - name: postgres
+        image: postgres:16-alpine
+        ports:
+        - name: postgres
+          containerPort: 5432
+        env:
+        - name: POSTGRES_DB
+          value: dozlab
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: postgres-credentials
+              key: password
+        # A subdirectory: initdb refuses a data directory that is a mount point with files in it
+        - name: PGDATA
+          value: /var/lib/postgresql/data/pgdata
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            memory: 1Gi
+        # Over TCP: on first start the image runs a temporary server on the Unix socket only,
+        # before it creates the "dozlab" database; a socket check would pass too early.
+        readinessProbe:
+          exec:
+            command: [pg_isready, -q, -h, 127.0.0.1, -U, postgres, -d, dozlab]
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 5
+        livenessProbe:
+          exec:
+            command: [pg_isready, -q, -h, 127.0.0.1, -U, postgres]
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 5
+        volumeMounts:
+        - name: data
+          mountPath: /var/lib/postgresql/data
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+    spec:
+      accessModes: [ReadWriteOnce]
+      storageClassName: local-path
+      resources:
+        requests:
+          storage: 5Gi
