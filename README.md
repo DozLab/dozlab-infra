@@ -230,6 +230,49 @@ Notes:
   the pod is recreated.
 - Deleting the StatefulSet keeps the PVC `data-rabbitmq-0`; delete it explicitly to wipe the data.
 
+### PostgreSQL (app database and audit store)
+
+`postgres.yaml` runs PostgreSQL for dozlab-api on the local cluster: namespace `dozlab`, a
+single-replica StatefulSet (`postgres:16-alpine`) with its data on a `local-path` PVC (5Gi),
+and a Service `postgres` (5432). It creates the empty database `dozlab`.
+
+The superuser password is not in the manifest. Create the Secret first:
+
+```bash
+kubectl create namespace dozlab --dry-run=client -o yaml | kubectl apply -f -
+kubectl -n dozlab create secret generic postgres-credentials \
+  --from-literal=password="$(openssl rand -hex 24)"
+```
+
+Apply it and wait until it is ready:
+
+```bash
+kubectl apply -f postgres.yaml
+kubectl -n dozlab rollout status statefulset/postgres
+kubectl -n dozlab exec postgres-0 -- pg_isready -h 127.0.0.1 -U postgres -d dozlab
+```
+
+Point dozlab-api at it:
+
+```bash
+DB_HOST=postgres.dozlab.svc.cluster.local DB_PORT=5432 DB_NAME=dozlab DB_USER=postgres
+# read the password back with:
+kubectl -n dozlab get secret postgres-credentials -o jsonpath='{.data.password}' | base64 -d
+```
+
+From the host (an API that runs outside the cluster): `kubectl -n dozlab port-forward svc/postgres 5432`.
+
+Notes:
+
+- The data belongs to the PVC `data-postgres-0`. Restarting the pod, re-applying the manifest
+  or deleting the StatefulSet keeps it. Deleting the PVC or the namespace deletes it: the
+  `local-path` StorageClass has reclaim policy `Delete`.
+- The password in the Secret is only applied when the data is first created. To change it
+  later: `ALTER ROLE postgres PASSWORD '...'` inside the pod, then update the Secret.
+- dozlab-api does not run migrations. Apply `dozlab-api/internal/database/migrations` (and
+  `audit_migrations` to the audit database); dozlab-api's `scripts/e2e-timing.sh up` does both.
+- One replica on one node's disk, and no backups yet.
+
 ## Scripts
 
 ### Deployment Script (`scripts/deploy.sh`)
