@@ -12,15 +12,15 @@ Infrastructure as Code, Kubernetes manifests, and deployment scripts for the Doz
 
 ## Architecture
 
-```
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   Git Repo      │────│   CI/CD         │────│   Kubernetes    │
-│                 │    │                 │    │                 │
-│ • Manifests     │    │ • Build         │    │ • Deployments   │
-│ • Scripts       │    │ • Test          │    │ • Services      │
-│ • Configs       │    │ • Deploy        │    │ • CRDs          │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
-```
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/diagrams/layer-stack-dark.png">
+  <img alt="Layer stack of a DozLab lab, bottom to top: the Ubuntu host with KVM, single-node k3s, the lab pod, Firecracker v1.15.1, the 6.1.155-dozlab guest kernel and the Ubuntu 22.04 guest root filesystem" src="docs/diagrams/layer-stack.png">
+</picture>
+
+This repo builds two of these layers, Firecracker and the guest kernel, into the
+`firecracker-vm` image, and holds the cluster manifests (the LabSession CRD, RabbitMQ and
+PostgreSQL). What sits inside one lab
+session pod is in [LAB_POD_ARCHITECTURE.md](LAB_POD_ARCHITECTURE.md).
 
 ## Directory Structure
 
