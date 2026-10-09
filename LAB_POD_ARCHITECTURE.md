@@ -4,45 +4,35 @@ This document explains the restructured lab pod architecture that integrates wit
 
 ## 🏗️ Architecture Overview
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                    Kubernetes Lab Pod                            │
-│                                                                   │
-│  ┌────────────────────────────────────────────────────────────┐ │
-│  │ Init Container 1: init-rootfs                              │ │
-│  │ Image: dozman99/dozlab-init:latest                         │ │
-│  │ • Downloads pre-built rootfs (dozlab-k8s.ext4)             │ │
-│  │ • Resizes ext4 filesystem to desired size                  │ │
-│  │ • Prepares image at /srv/vm/kernels/rootfs.ext4            │ │
-│  └────────────────────────────────────────────────────────────┘ │
-│  ┌────────────────────────────────────────────────────────────┐ │
-│  │ Init Container 2: network-setup                            │ │
-│  │ Image: busybox                                              │ │
-│  │ • Calculates network configuration                         │ │
-│  │ • Writes config to /shared/network-config                  │ │
-│  └────────────────────────────────────────────────────────────┘ │
-│                                                                   │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐          │
-│  │ Container 1  │  │ Container 2  │  │ Container 3  │          │
-│  │ firecracker  │  │ terminal     │  │ code-server  │          │
-│  │    -vm       │  │   sidecar    │  │  (VS Code)   │          │
-│  │              │  │              │  │              │          │
-│  │ Port: 22     │  │ Port: 8081   │  │ Port: 8080   │          │
-│  │ CPU: 0.5-1.5 │  │ CPU: 0.1-0.25│  │ CPU: 0.25-0.5│          │
-│  │ RAM: 1-2Gi   │  │ RAM: 128-256M│  │ RAM: 512M-1Gi│          │
-│  └──────────────┘  └──────────────┘  └──────────────┘          │
-│         │                 │                  │                   │
-│         └────────┬────────┴──────────────────┘                   │
-│                  │                                                │
-│  ┌──────────────────────────────────────────────────────────┐   │
-│  │              Shared Volumes (emptyDir)                    │   │
-│  │ • vm-kernels (2Gi) - Kernel + rootfs.ext4                │   │
-│  │ • vm-data (5Gi) - VM working directory                    │   │
-│  │ • vscode-data (1Gi) - VS Code config/extensions           │   │
-│  │ • shared-config (10Mi) - Network config                   │   │
-│  └──────────────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────────┘
-```
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/diagrams/lab-pod-exploded-dark.png">
+  <img alt="Exploded view of a lab session pod: its four volumes at the bottom, and above them the Firecracker microVM, the terminal sidecar and code-server side by side" src="docs/diagrams/lab-pod-exploded.png">
+</picture>
+
+dozlab-controller creates one pod per `LabSession`. Two init containers run first:
+`init-rootfs` writes the lab's root filesystem into the `vm-kernels` volume, and
+`network-setup` writes the VM's addresses to `shared-config`. Then three containers run side by
+side:
+
+- **`firecracker-vm`** (this repo's `Dockerfile` and `start-firecracker.sh`) boots the
+  Firecracker microVM. It is unprivileged, with `NET_ADMIN`, `SYS_ADMIN` and `SYS_RESOURCE`, and
+  gets `/dev/kvm` and `/dev/net/tun` from the `dozlab.io/kvm` and `dozlab.io/tun` resources. The
+  guest is `172.16.0.2` behind `tap0`, with SSH on port 22.
+- **`terminal-sidecar`** bridges the browser's WebSocket to SSH into the VM, on port 8081.
+- **`code-server`** serves VS Code on port 8080, with `vm-data` as its workspace.
+
+Volumes: `vm-kernels` (emptyDir holding the rootfs, sized above the disk), `shared-config`
+(emptyDir, 10Mi), and `vm-data` and `vscode-data` (one PVC each per session).
+
+### What runs under a lab
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/diagrams/layer-stack-dark.png">
+  <img alt="Layer stack of a DozLab lab, bottom to top: the Ubuntu host with KVM, single-node k3s, the lab pod, Firecracker v1.15.1, the 6.1.155-dozlab guest kernel and the Ubuntu 22.04 guest root filesystem" src="docs/diagrams/layer-stack.png">
+</picture>
+
+Firecracker v1.15.1 and the `6.1.155-dozlab` guest kernel (`kernel/dozlab.config`) are built
+by this repo's `Dockerfile`. Everything above Firecracker runs inside the KVM guest.
 
 ## 🔄 Integration with Dozlab Rootfs Manager
 
