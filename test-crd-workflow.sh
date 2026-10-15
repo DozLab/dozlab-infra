@@ -101,7 +101,7 @@ print_status "LabSession CRD created: ${LAB_SESSION_NAME}"
 print_step "3. Waiting for controller to process the LabSession..."
 
 # Wait up to 60 seconds for status to appear
-for i in {1..60}; do
+for _ in {1..60}; do
     if kubectl get labsession "${LAB_SESSION_NAME}" -o jsonpath='{.status.phase}' 2>/dev/null | grep -q "Creating\|Running\|Failed"; then
         break
     fi

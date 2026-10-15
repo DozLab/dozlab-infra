@@ -25,7 +25,7 @@ fi
 
 function genMAC () {
   hexchars="0123456789ABCDEF"
-  end=$( for i in {1..8} ; do echo -n ${hexchars:$(( $RANDOM % 16 )):1} ; done | sed -e 's/\(..\)/:\1/g' )
+  end=$( for _ in {1..8} ; do echo -n ${hexchars:$(( $RANDOM % 16 )):1} ; done | sed -e 's/\(..\)/:\1/g' )
   echo "FE:05$end"
 }
 
@@ -33,7 +33,7 @@ function setupNetworking() {
   iface=eth0
 
   ifaceIPs=$(ip address show dev $iface | grep inet | awk '/inet / { print $2 }' | cut -f1 -d/)
-  ifaceIPs=($ifaceIPs)
+  read -ra ifaceIPs <<< "$ifaceIPs"
   NETWORK_IP=${ifaceIPs[0]}
 
   echo "Setting up tap device"
