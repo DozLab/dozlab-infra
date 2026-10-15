@@ -24,6 +24,10 @@ controller:
     # Defaults to the chart appVersion.
     tag: ""
     pullPolicy: IfNotPresent
+  # Pod selector. Empty uses the chart's app.kubernetes.io/* labels. A Deployment's selector
+  # can't change, so to adopt a controller deployed without Helm, set its selector here
+  # (deploy/deployment.yaml uses {app: dozlab-controller}).
+  selectorLabels: {}
   leaderElect: true
   maxConcurrentReconciles: 10
   syncPeriod: 10m
@@ -38,6 +42,12 @@ controller:
     vmDiskSize: 4Gi
     # StorageClass for session PVCs; empty uses the cluster default.
     storageClass: ""
+    # Session Ingresses (code-server and terminal, by path). ingressMiddleware is the Traefik
+    # Middleware that strips the session prefix, as <namespace>-<name>@kubernetescrd.
+    ingressClass: traefik
+    ingressMiddleware: ""
+    # Public URL of the ingress controller, used in session endpoints; empty gives paths only.
+    publicBaseURL: ""
   # Secret with key `url` (amqp://...) for publishing LabSession phase changes.
   # Optional: without it the controller doesn't publish.
   rabbitmqSecret: dozlab-controller-rabbitmq

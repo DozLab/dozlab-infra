@@ -64,6 +64,10 @@ api:
 | `controller.labPod.sshUser` | `root` | User the terminal sidecar logs in as |
 | `controller.labPod.vmDiskSize` | `4Gi` | Size the VM rootfs is grown to |
 | `controller.labPod.storageClass` | `""` | StorageClass for session PVCs; empty uses the cluster default |
+| `controller.labPod.ingressClass` | `traefik` | IngressClass for session Ingresses |
+| `controller.labPod.ingressMiddleware` | `""` | Traefik Middleware that strips the session path prefix, as `<namespace>-<name>@kubernetescrd` |
+| `controller.labPod.publicBaseURL` | `""` | Public URL of the ingress controller, used in session endpoints; empty gives paths only |
+| `controller.selectorLabels` | `{}` | Pod selector; empty uses the chart's labels. Set `{app: dozlab-controller}` to adopt a controller applied from `deploy/deployment.yaml` (see "Adopting an existing controller") |
 | `controller.rabbitmqSecret` | `dozlab-controller-rabbitmq` | Optional Secret (key `url`) for phase events |
 | `api.enabled` | `true` | Deploy the API |
 | `api.replicaCount` | `2` | Replicas |
@@ -71,6 +75,23 @@ api:
 | `api.env` | see `values.yaml` | Non-secret env: `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `REDIS_HOST`, `REDIS_PORT`, `GIN_MODE` |
 | `api.existingSecret` | `dozlab-api` | **Required** Secret loaded with `envFrom` |
 | `api.ingress.enabled` | `false` | Ingress for the API (`className`, `host`, `tls`, `annotations`) |
+
+## Labels
+
+Every object carries the [recommended labels](https://kubernetes.io/docs/concepts/overview/working-with-objects/common-labels/):
+
+| Label | Value |
+|---|---|
+| `app.kubernetes.io/name` | `dozlab` |
+| `app.kubernetes.io/instance` | the release name |
+| `app.kubernetes.io/component` | `controller` or `api` |
+| `app.kubernetes.io/part-of` | `dozlab` |
+| `app.kubernetes.io/version` | the component's **image tag**, i.e. what runs (`main-<sha7>-<run>` or a release version); the CRD has the chart version |
+| `app.kubernetes.io/managed-by` | `Helm` |
+| `helm.sh/chart` | `dozlab-<chart version>` |
+
+Pods carry name, instance, component, part-of and version, so `kubectl get pods -l app.kubernetes.io/part-of=dozlab -L app.kubernetes.io/version`
+shows what runs where. Selectors use name, instance and component only (or `controller.selectorLabels`), so a new image never changes them.
 
 ## Releasing a new version
 
@@ -114,19 +135,32 @@ prune stored data, so keep CRD changes additive.
 ## Adopting an existing install
 
 Helm won't install over objects it doesn't own. If the CRD was applied with `kubectl apply -f crd-definition.yaml`
-and the controller from `dozlab-controller/deploy/deployment.yaml`:
+and the controller from `dozlab-controller/deploy/deployment.yaml`, hand them to the release instead of deleting
+them: deleting the CRD deletes every LabSession, and the controller keeps running through the takeover.
 
-```bash
-# Let the release take over the CRD (keeps existing LabSessions)
-kubectl label crd labsessions.dozlab.io app.kubernetes.io/managed-by=Helm --overwrite
-kubectl annotate crd labsessions.dozlab.io \
-  meta.helm.sh/release-name=dozlab meta.helm.sh/release-namespace=dozlab-system --overwrite
-
-# Remove the old controller so two controllers don't reconcile the same sessions
-kubectl -n dozlab-system delete deployment/dozlab-controller service/dozlab-controller-metrics serviceaccount/dozlab-controller
-kubectl delete clusterrolebinding dozlab-controller-rolebinding
-kubectl delete clusterrole dozlab-controller-role
-```
-
-With the release name `dozlab`, the chart's controller objects reuse the names `dozlab-controller` and
-`dozlab-controller-metrics`, so the install fails until the old ones are gone.
+1. Set the old selector in your values. A Deployment's selector can't change, and the old one is
+   `app: dozlab-controller`:
+   ```yaml
+   controller:
+     selectorLabels:
+       app: dozlab-controller
+   ```
+2. Mark the objects the chart reuses as the release's (release `dozlab` in `dozlab-system`; with that release
+   name the controller objects keep their names `dozlab-controller` and `dozlab-controller-metrics`):
+   ```bash
+   own() {  # own <kubectl args...>
+     kubectl label "$@" app.kubernetes.io/managed-by=Helm --overwrite
+     kubectl annotate "$@" meta.helm.sh/release-name=dozlab meta.helm.sh/release-namespace=dozlab-system --overwrite
+   }
+   own crd labsessions.dozlab.io
+   own -n dozlab-system deployment dozlab-controller
+   own -n dozlab-system service dozlab-controller-metrics
+   own -n dozlab-system serviceaccount dozlab-controller
+   ```
+3. Install or upgrade the release (or let Flux do it). The Deployment rolls to the chart's pod spec.
+4. The old RBAC has other names (`dozlab-controller-role`, `dozlab-controller-rolebinding`), so the chart
+   creates its own beside it. Once the new pods are Ready, delete the old ones:
+   ```bash
+   kubectl delete clusterrolebinding dozlab-controller-rolebinding
+   kubectl delete clusterrole dozlab-controller-role
+   ```

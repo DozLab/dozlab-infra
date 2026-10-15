@@ -16,7 +16,7 @@ spec:
   template:
     metadata:
       labels:
-        {{- include "dozlab.selectorLabels" $c | nindent 8 }}
+        {{- include "dozlab.podLabels" $c | nindent 8 }}
       {{- with $v.podAnnotations }}
       annotations:
         {{- toYaml . | nindent 8 }}
