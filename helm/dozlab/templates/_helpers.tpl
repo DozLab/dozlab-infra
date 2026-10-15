@@ -59,3 +59,13 @@ app.kubernetes.io/component: {{ .component }}
 {{- $img := index .ctx.Values .component "image" }}
 {{- printf "%s:%s" $img.repository (default .ctx.Chart.AppVersion $img.tag) }}
 {{- end }}
+
+{{/* Controller pod selector: controller.selectorLabels when set (adopting a controller deployed
+without Helm), otherwise the standard selector labels. Call with the root context. */}}
+{{- define "dozlab.controllerSelectorLabels" -}}
+{{- with .Values.controller.selectorLabels }}
+{{- toYaml . }}
+{{- else }}
+{{- include "dozlab.selectorLabels" (dict "ctx" $ "component" "controller") }}
+{{- end }}
+{{- end }}

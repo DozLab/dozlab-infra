@@ -13,11 +13,14 @@ spec:
   replicas: {{ $v.replicaCount }}
   selector:
     matchLabels:
-      {{- include "dozlab.selectorLabels" $c | nindent 6 }}
+      {{- include "dozlab.controllerSelectorLabels" $ | nindent 6 }}
   template:
     metadata:
       labels:
         {{- include "dozlab.selectorLabels" $c | nindent 8 }}
+        {{- with $v.selectorLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
       {{- with $v.podAnnotations }}
       annotations:
         {{- toYaml . | nindent 8 }}
@@ -64,6 +67,16 @@ spec:
           value: {{ $lp.vmDiskSize | quote }}
         {{- with $lp.storageClass }}
         - name: DOZLAB_STORAGE_CLASS
+          value: {{ . | quote }}
+        {{- end }}
+        - name: DOZLAB_INGRESS_CLASS
+          value: {{ $lp.ingressClass | quote }}
+        {{- with $lp.ingressMiddleware }}
+        - name: DOZLAB_INGRESS_MIDDLEWARE
+          value: {{ . | quote }}
+        {{- end }}
+        {{- with $lp.publicBaseURL }}
+        - name: DOZLAB_PUBLIC_BASE_URL
           value: {{ . | quote }}
         {{- end }}
         {{- with $v.rabbitmqSecret }}
@@ -117,7 +130,7 @@ spec:
               topologyKey: kubernetes.io/hostname
               labelSelector:
                 matchLabels:
-                  {{- include "dozlab.selectorLabels" $c | nindent 18 }}
+                  {{- include "dozlab.controllerSelectorLabels" $ | nindent 18 }}
       {{- end }}
 ---
 apiVersion: v1
@@ -129,7 +142,7 @@ metadata:
     {{- include "dozlab.componentLabels" $c | nindent 4 }}
 spec:
   selector:
-    {{- include "dozlab.selectorLabels" $c | nindent 4 }}
+    {{- include "dozlab.controllerSelectorLabels" $ | nindent 4 }}
   ports:
   - name: metrics
     port: 8080

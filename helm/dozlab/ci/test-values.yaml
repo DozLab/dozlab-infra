@@ -5,6 +5,10 @@ controller:
     initImage: ghcr.io/dozlab/dozlab-init:ci
     terminalImage: ghcr.io/dozlab/dozlab-terminal:ci
     storageClass: local-path
+    ingressMiddleware: default-dozlab-strip-session-prefix@kubernetescrd
+    publicBaseURL: https://dozlab.example
+  selectorLabels:
+    app: dozlab-controller
 api:
   ingress:
     enabled: true
