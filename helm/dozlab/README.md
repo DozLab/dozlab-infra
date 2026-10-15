@@ -76,6 +76,23 @@ api:
 | `api.existingSecret` | `dozlab-api` | **Required** Secret loaded with `envFrom` |
 | `api.ingress.enabled` | `false` | Ingress for the API (`className`, `host`, `tls`, `annotations`) |
 
+## Labels
+
+Every object carries the [recommended labels](https://kubernetes.io/docs/concepts/overview/working-with-objects/common-labels/):
+
+| Label | Value |
+|---|---|
+| `app.kubernetes.io/name` | `dozlab` |
+| `app.kubernetes.io/instance` | the release name |
+| `app.kubernetes.io/component` | `controller` or `api` |
+| `app.kubernetes.io/part-of` | `dozlab` |
+| `app.kubernetes.io/version` | the component's **image tag**, i.e. what runs (`main-<sha7>-<run>` or a release version); the CRD has the chart version |
+| `app.kubernetes.io/managed-by` | `Helm` |
+| `helm.sh/chart` | `dozlab-<chart version>` |
+
+Pods carry name, instance, component, part-of and version, so `kubectl get pods -l app.kubernetes.io/part-of=dozlab -L app.kubernetes.io/version`
+shows what runs where. Selectors use name, instance and component only (or `controller.selectorLabels`), so a new image never changes them.
+
 ## Releasing a new version
 
 The workflow is `.github/workflows/helm-chart.yml`.

@@ -17,7 +17,7 @@ spec:
   template:
     metadata:
       labels:
-        {{- include "dozlab.selectorLabels" $c | nindent 8 }}
+        {{- include "dozlab.podLabels" $c | nindent 8 }}
         {{- with $v.selectorLabels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -98,12 +98,14 @@ spec:
             port: health
           initialDelaySeconds: 15
           periodSeconds: 20
+          timeoutSeconds: 5
         readinessProbe:
           httpGet:
             path: /readyz
             port: health
           initialDelaySeconds: 5
           periodSeconds: 10
+          timeoutSeconds: 5
         resources:
           {{- toYaml $v.resources | nindent 10 }}
         securityContext:
