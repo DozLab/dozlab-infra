@@ -79,6 +79,10 @@ spec:
         - name: DOZLAB_PUBLIC_BASE_URL
           value: {{ . | quote }}
         {{- end }}
+        {{- with $lp.imagePullSecrets }}
+        - name: DOZLAB_IMAGE_PULL_SECRETS
+          value: {{ join "," . | quote }}
+        {{- end }}
         {{- with $v.rabbitmqSecret }}
         - name: RABBITMQ_URL
           valueFrom:

@@ -1,0 +1,41 @@
+# OpenBao itself is the upstream openbao chart (dozlab-fleet). This chart creates what it needs
+# before it starts (its namespace, unseal key and admin password) and what External Secrets
+# Operator needs to read it (the ClusterSecretStore and the ExternalSecrets).
+openbao:
+  # Kept on `helm uninstall` (helm.sh/resource-policy: keep): deleting it deletes OpenBao's data.
+  namespace: openbao
+  address: http://openbao.openbao.svc:8200
+  # Generated on first install, then never changed (lookup) and kept on uninstall. The unseal key
+  # is 32 random bytes in hex for OpenBao's static seal; losing it loses the data.
+  unsealKeySecret: openbao-unseal-key
+  # Password of OpenBao's `admin` userpass login (UI and CLI), key `password`.
+  adminSecret: openbao-admin
+  # kv-v2 mount and the kubernetes auth role ESO logs in with (set up by OpenBao's self-init).
+  kvPath: secret
+  authMount: kubernetes
+  role: external-secrets
+
+store:
+  # ClusterSecretStore name, used by every ExternalSecret below.
+  name: openbao
+  # ESO's own service account, which the OpenBao role is bound to.
+  serviceAccount:
+    name: external-secrets
+    namespace: external-secrets
+
+# How often ESO re-reads OpenBao (a changed value shows up within this).
+refreshInterval: 1h
+
+# Pull secret for the private GHCR images (dozlab-terminal), from OpenBao secret/dozlab/ghcr-pull
+# (keys `username` and `token`, a read:packages token). Set it once (README, "Setting a value").
+ghcrPull:
+  enabled: true
+  remoteKey: dozlab/ghcr-pull
+  # Registry login Secret (kubernetes.io/dockerconfigjson) written into each namespace below.
+  targetName: ghcr-pull
+  registry: ghcr.io
+  # default: lab pods (dozlab chart controller.labPod.imagePullSecrets); flux-system: Flux's
+  # ImageRepository for dozlab-terminal. Only these namespaces may use the store.
+  namespaces:
+    - default
+    - flux-system

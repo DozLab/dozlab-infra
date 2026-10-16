@@ -1,0 +1,5 @@
+# Values used by CI (helm lint / template / kubeconform). Not for real installs.
+ghcrPull:
+  namespaces:
+    - default
+    - flux-system

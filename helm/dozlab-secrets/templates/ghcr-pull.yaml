@@ -1,0 +1,37 @@
+{{- if .Values.ghcrPull.enabled }}
+{{- $g := .Values.ghcrPull }}
+{{- range $i, $ns := $g.namespaces }}
+{{- if $i }}
+---
+{{- end }}
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: {{ $g.targetName }}
+  namespace: {{ $ns }}
+  labels:
+    {{- include "dozlab-secrets.labels" $ | nindent 4 }}
+spec:
+  refreshInterval: {{ $.Values.refreshInterval }}
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: {{ $.Values.store.name }}
+  target:
+    name: {{ $g.targetName }}
+    creationPolicy: Owner
+    template:
+      type: kubernetes.io/dockerconfigjson
+      data:
+        # ESO's template, not Helm's: the braces are passed through as-is.
+        .dockerconfigjson: {{ printf `{"auths":{%q:{"username":"{{ .username }}","password":"{{ .token }}","auth":"{{ printf "%%s:%%s" .username .token | b64enc }}"}}}` $g.registry | squote }}
+  data:
+    - secretKey: username
+      remoteRef:
+        key: {{ $g.remoteKey }}
+        property: username
+    - secretKey: token
+      remoteRef:
+        key: {{ $g.remoteKey }}
+        property: token
+{{- end }}
+{{- end }}
