@@ -67,6 +67,7 @@ api:
 | `controller.labPod.ingressClass` | `traefik` | IngressClass for session Ingresses |
 | `controller.labPod.ingressMiddleware` | `""` | Traefik Middleware that strips the session path prefix, as `<namespace>-<name>@kubernetescrd` |
 | `controller.labPod.publicBaseURL` | `""` | Public URL of the ingress controller, used in session endpoints; empty gives paths only |
+| `controller.labPod.imagePullSecrets` | `[]` | Secrets in the sessions' namespace that lab pods pull images with, e.g. `[ghcr-pull]` (needs dozlab-controller with `DOZLAB_IMAGE_PULL_SECRETS`) |
 | `controller.selectorLabels` | `{}` | Pod selector; empty uses the chart's labels. Set `{app: dozlab-controller}` to adopt a controller applied from `deploy/deployment.yaml` (see "Adopting an existing controller") |
 | `controller.rabbitmqSecret` | `dozlab-controller-rabbitmq` | Optional Secret (key `url`) for phase events |
 | `api.enabled` | `true` | Deploy the API |

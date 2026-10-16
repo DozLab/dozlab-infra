@@ -1,0 +1,29 @@
+# Namespace holding the real secret values. External Secrets Operator reads it through the
+# ClusterSecretStore (its Kubernetes provider) and copies values into other namespaces; only the
+# reader service account below and cluster admins can read it. Kept on `helm uninstall`
+# (helm.sh/resource-policy: keep) so the values aren't lost.
+sourceNamespace: dozlab-secrets
+
+store:
+  # ClusterSecretStore name, used by every ExternalSecret below.
+  name: dozlab
+  # Service account in sourceNamespace that ESO logs in as; it can only read Secrets there.
+  readerServiceAccount: eso-reader
+
+# How often ESO re-copies the values (a changed source shows up within this).
+refreshInterval: 1h
+
+# Pull secret for the private GHCR images (dozlab-terminal). The source Secret is created empty
+# and Helm never overwrites its values; set them once with kubectl (README, "Setting a value").
+ghcrPull:
+  enabled: true
+  # Source Secret in sourceNamespace, with keys `username` and `token` (read:packages).
+  sourceSecret: ghcr
+  # Registry login Secret (kubernetes.io/dockerconfigjson) written into each namespace below.
+  targetName: ghcr-pull
+  registry: ghcr.io
+  # default: lab pods (dozlab chart controller.labPod.imagePullSecrets); flux-system: Flux's
+  # ImageRepository for dozlab-terminal. Only these namespaces may use the store.
+  namespaces:
+    - default
+    - flux-system

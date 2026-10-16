@@ -48,6 +48,9 @@ controller:
     ingressMiddleware: ""
     # Public URL of the ingress controller, used in session endpoints; empty gives paths only.
     publicBaseURL: ""
+    # Secrets in the sessions' namespace that lab pods pull images with, e.g. [ghcr-pull] for the
+    # private dozlab-terminal (written by the dozlab-secrets chart's ExternalSecret). Empty: none.
+    imagePullSecrets: []
   # Secret with key `url` (amqp://...) for publishing LabSession phase changes.
   # Optional: without it the controller doesn't publish.
   rabbitmqSecret: dozlab-controller-rabbitmq

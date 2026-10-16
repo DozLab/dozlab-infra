@@ -7,6 +7,7 @@ controller:
     storageClass: local-path
     ingressMiddleware: default-dozlab-strip-session-prefix@kubernetescrd
     publicBaseURL: https://dozlab.example
+    imagePullSecrets: [ghcr-pull]
   selectorLabels:
     app: dozlab-controller
 api:
