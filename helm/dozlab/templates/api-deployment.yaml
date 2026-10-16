@@ -41,9 +41,14 @@ spec:
         - name: {{ $k }}
           value: {{ $val | quote }}
         {{- end }}
+        - name: AUDIT_SPOOL_DIR
+          value: /var/spool/dozlab-audit
         envFrom:
         - secretRef:
-            name: {{ required "api.existingSecret is required (DB_PASSWORD, JWT_SECRET, RABBITMQ_URL)" $v.existingSecret }}
+            name: {{ required "api.existingSecret is required (JWT_SECRET, DB_PASSWORD, RABBITMQ_URL)" $v.existingSecret }}
+        volumeMounts:
+        - name: audit-spool
+          mountPath: /var/spool/dozlab-audit
         ports:
         - name: http
           containerPort: {{ $v.port }}
@@ -66,6 +71,10 @@ spec:
           readOnlyRootFilesystem: true
           capabilities:
             drop: ["ALL"]
+      volumes:
+      - name: audit-spool
+        emptyDir:
+          sizeLimit: {{ $v.auditSpool.sizeLimit }}
       {{- with $v.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
@@ -116,10 +125,12 @@ spec:
     {{- toYaml . | nindent 4 }}
   {{- end }}
   rules:
-  - host: {{ $v.ingress.host | quote }}
+  - {{- with $v.ingress.host }}
+    host: {{ . | quote }}
+    {{- end }}
     http:
       paths:
-      - path: /
+      - path: {{ $v.ingress.path }}
         pathType: Prefix
         backend:
           service:

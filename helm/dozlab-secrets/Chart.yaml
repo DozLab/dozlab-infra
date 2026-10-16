@@ -3,7 +3,7 @@ name: dozlab-secrets
 description: DozLab secrets - a locked-down source namespace, and the External Secrets Operator store and ExternalSecrets that copy from it
 type: application
 # Chart version: bump on every chart change (SemVer). The release tag is dozlab-secrets-v<version>.
-version: 0.1.0
+version: 0.2.0
 kubeVersion: ">=1.28.0-0"
 home: https://github.com/DozLab/dozlab-infra
 sources:

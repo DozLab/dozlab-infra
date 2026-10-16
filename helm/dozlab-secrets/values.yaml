@@ -27,3 +27,25 @@ ghcrPull:
   namespaces:
     - default
     - flux-system
+
+# Postgres and RabbitMQ credentials, read where they live (the dozlab namespace, dozlab-infra
+# postgres.yaml and RabbitMQ) through a second store that can only get these two Secrets.
+infra:
+  namespace: dozlab
+  storeName: dozlab-infra
+  postgresSecret: postgres-credentials   # key `password`, of the superuser postgres
+  rabbitmqSecret: rabbitmq-credentials   # keys `username`, `password`
+
+# The API's Secrets in its namespace (the dozlab chart's api.existingSecret and
+# api.migrations.existingSecret). The source Secret `api` is generated on first install (JWT
+# secret and the database logins' passwords), then never changed by Helm (lookup) and kept on
+# uninstall; the migration Job sets the logins' passwords from it.
+api:
+  enabled: true
+  namespace: dozlab-system
+  sourceSecret: api
+  targetName: dozlab-api
+  migrateTargetName: dozlab-api-migrate
+  postgresHost: postgres.dozlab.svc:5432
+  rabbitmqHost: rabbitmq.dozlab.svc:5672
+  auditDatabase: dozlab_audit

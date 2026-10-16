@@ -1,0 +1,92 @@
+{{- if .Values.api.enabled }}
+{{- $a := .Values.api }}
+{{- $i := .Values.infra }}
+{{- $existing := lookup "v1" "Secret" .Values.sourceNamespace $a.sourceSecret }}
+{{- $data := dict }}
+{{- if and $existing $existing.data }}{{ $data = $existing.data }}{{ end }}
+# Generated once: each key keeps the value already in the cluster (lookup); only a missing key is
+# generated. Kept on uninstall. Rotating a password: change it here, re-run the migration Job.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ $a.sourceSecret }}
+  namespace: {{ .Values.sourceNamespace }}
+  labels:
+    {{- include "dozlab-secrets.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/resource-policy: keep
+type: Opaque
+data:
+  {{- range $k := list "jwt-secret" "db-app-password" "audit-owner-password" "audit-writer-password" "audit-reader-password" }}
+  {{ $k }}: {{ index $data $k | default (randAlphaNum 48 | b64enc) }}
+  {{- end }}
+---
+# The API's env (dozlab chart api.existingSecret). ESO's templates below, not Helm's.
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: {{ $a.targetName }}
+  namespace: {{ $a.namespace }}
+  labels:
+    {{- include "dozlab-secrets.labels" . | nindent 4 }}
+spec:
+  refreshInterval: {{ .Values.refreshInterval }}
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: {{ .Values.store.name }}
+  target:
+    name: {{ $a.targetName }}
+    creationPolicy: Owner
+    template:
+      data:
+        JWT_SECRET: {{ `'{{ .jwt }}'` }}
+        DB_PASSWORD: {{ `'{{ .appPassword }}'` }}
+        RABBITMQ_URL: {{ printf `'amqp://{{ .rabbitUser | urlquery }}:{{ .rabbitPassword | urlquery }}@%s/'` $a.rabbitmqHost }}
+        AUDIT_DATABASE_URL: {{ printf `'postgres://dozlab_api_audit:{{ .auditWriterPassword | urlquery }}@%s/%s?sslmode=disable'` $a.postgresHost $a.auditDatabase }}
+        AUDIT_READ_DATABASE_URL: {{ printf `'postgres://dozlab_audit_admin:{{ .auditReaderPassword | urlquery }}@%s/%s?sslmode=disable'` $a.postgresHost $a.auditDatabase }}
+  data:
+    - secretKey: jwt
+      remoteRef: {key: {{ $a.sourceSecret }}, property: jwt-secret}
+    - secretKey: appPassword
+      remoteRef: {key: {{ $a.sourceSecret }}, property: db-app-password}
+    - secretKey: auditWriterPassword
+      remoteRef: {key: {{ $a.sourceSecret }}, property: audit-writer-password}
+    - secretKey: auditReaderPassword
+      remoteRef: {key: {{ $a.sourceSecret }}, property: audit-reader-password}
+    - secretKey: rabbitUser
+      sourceRef: {storeRef: {kind: ClusterSecretStore, name: {{ $i.storeName }}}}
+      remoteRef: {key: {{ $i.rabbitmqSecret }}, property: username}
+    - secretKey: rabbitPassword
+      sourceRef: {storeRef: {kind: ClusterSecretStore, name: {{ $i.storeName }}}}
+      remoteRef: {key: {{ $i.rabbitmqSecret }}, property: password}
+---
+# The migration Job's env (dozlab chart api.migrations.existingSecret): the superuser password and
+# the passwords it sets on the logins.
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: {{ $a.migrateTargetName }}
+  namespace: {{ $a.namespace }}
+  labels:
+    {{- include "dozlab-secrets.labels" . | nindent 4 }}
+spec:
+  refreshInterval: {{ .Values.refreshInterval }}
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: {{ .Values.store.name }}
+  target:
+    name: {{ $a.migrateTargetName }}
+    creationPolicy: Owner
+  data:
+    - secretKey: PGPASSWORD
+      sourceRef: {storeRef: {kind: ClusterSecretStore, name: {{ $i.storeName }}}}
+      remoteRef: {key: {{ $i.postgresSecret }}, property: password}
+    - secretKey: APP_DB_PASSWORD
+      remoteRef: {key: {{ $a.sourceSecret }}, property: db-app-password}
+    - secretKey: AUDIT_OWNER_PASSWORD
+      remoteRef: {key: {{ $a.sourceSecret }}, property: audit-owner-password}
+    - secretKey: AUDIT_WRITER_PASSWORD
+      remoteRef: {key: {{ $a.sourceSecret }}, property: audit-writer-password}
+    - secretKey: AUDIT_READER_PASSWORD
+      remoteRef: {key: {{ $a.sourceSecret }}, property: audit-reader-password}
+{{- end }}

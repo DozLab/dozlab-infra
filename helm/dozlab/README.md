@@ -6,23 +6,27 @@ Installs the DozLab platform into one namespace:
 - **dozlab-controller**: Deployment, ServiceAccount, ClusterRole for pods/services/PVCs/events/labsessions,
   a leader-election Role in the release namespace, and a metrics Service
 - **dozlab-api**: Deployment, Service, optional Ingress, and a Role in `labSessions.namespace` that allows
-  `get`/`create`/`delete` on LabSessions
+  `get`/`list`/`create`/`delete` on LabSessions
+- The API's migrations: a Job (Helm hook) before every install and upgrade runs `migrate` from the
+  API image, which applies the SQL migrations and sets up the API's database logins
 
-Postgres, Redis and RabbitMQ are **not** installed; the API points at existing ones.
+Postgres and RabbitMQ are **not** installed; the API points at existing ones.
 
 ## Prerequisites
 
 - Kubernetes 1.28+ and Helm 3
 - Nodes with `/dev/kvm` and the device plugin that provides `dozlab.io/kvm` and `dozlab.io/tun`
-- Postgres with the dozlab-api schema applied (`dozlab-api/internal/database/migrations/001_initial_schema.up.sql`).
-  The chart doesn't run migrations.
-- Redis and RabbitMQ
-- Secrets, which the chart never creates:
-  - `dozlab-api` in the release namespace: `DB_PASSWORD`, `JWT_SECRET`, `RABBITMQ_URL`, optionally `REDIS_PASSWORD`
+- Postgres (the `dozlab` database must exist; the migration Job creates the tables, the audit
+  store and the logins) and RabbitMQ
+- Secrets, which the chart never creates (on DozLab's cluster the dozlab-secrets chart's
+  ExternalSecrets write the first two):
+  - `dozlab-api` in the release namespace: `JWT_SECRET`, `DB_PASSWORD` (of `dozlab_app`),
+    `RABBITMQ_URL`, and optionally `AUDIT_DATABASE_URL`, `AUDIT_READ_DATABASE_URL`
+  - `dozlab-api-migrate` in the release namespace, for the migration Job: `PGPASSWORD` (Postgres
+    superuser), `APP_DB_PASSWORD`, `AUDIT_OWNER_PASSWORD`, `AUDIT_WRITER_PASSWORD`, `AUDIT_READER_PASSWORD`
   - optional `dozlab-controller-rabbitmq` (key `url`) in the release namespace: turns on LabSession phase events
-- Published images. The controller and API default to `ghcr.io/dozlab/dozlab-controller` and
-  `ghcr.io/dozlab/dozlab-api` with the chart's `appVersion` as tag. **CI doesn't publish either image
-  yet, and dozlab-api has no Dockerfile yet.**
+- Published images: CI pushes `ghcr.io/dozlab/dozlab-controller` and `ghcr.io/dozlab/dozlab-api`
+  (`main-<sha7>-<run>`); set the tags, or they default to the chart's `appVersion`.
 
 ## Install
 
@@ -44,9 +48,10 @@ controller:
     initImage: <registry>/dozlab-init:<tag>
     terminalImage: <registry>/dozlab-terminal:<tag>
 api:
+  image:
+    tag: <tag>
   env:
     DB_HOST: postgres.dozlab.svc
-    REDIS_HOST: redis.dozlab.svc
 ```
 
 ## Configuration
@@ -71,11 +76,15 @@ api:
 | `controller.selectorLabels` | `{}` | Pod selector; empty uses the chart's labels. Set `{app: dozlab-controller}` to adopt a controller applied from `deploy/deployment.yaml` (see "Adopting an existing controller") |
 | `controller.rabbitmqSecret` | `dozlab-controller-rabbitmq` | Optional Secret (key `url`) for phase events |
 | `api.enabled` | `true` | Deploy the API |
-| `api.replicaCount` | `2` | Replicas |
-| `api.image.repository` / `.tag` | `ghcr.io/dozlab/dozlab-api` / appVersion | API image |
-| `api.env` | see `values.yaml` | Non-secret env: `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `REDIS_HOST`, `REDIS_PORT`, `GIN_MODE` |
+| `api.replicaCount` | `1` | Replicas |
+| `api.image.repository` / `.tag` | `ghcr.io/dozlab/dozlab-api` / appVersion | API image (also runs the migration Job) |
+| `api.env` | see `values.yaml` | Non-secret env: `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER` (`dozlab_app`), `GIN_MODE` |
 | `api.existingSecret` | `dozlab-api` | **Required** Secret loaded with `envFrom` |
-| `api.ingress.enabled` | `false` | Ingress for the API (`className`, `host`, `tls`, `annotations`) |
+| `api.auditSpool.sizeLimit` | `256Mi` | emptyDir for `AUDIT_SPOOL_DIR` (entries waiting for the audit store) |
+| `api.migrations.enabled` | `true` | Run `migrate` as a pre-install/pre-upgrade hook Job |
+| `api.migrations.existingSecret` | `dozlab-api-migrate` | **Required** with migrations: superuser and logins' passwords |
+| `api.migrations.env` | see `values.yaml` | `PGHOST`, `PGPORT`, `PGUSER`, `PGSSLMODE`, `DB_NAME`, `APP_DB_USER` |
+| `api.ingress.enabled` | `false` | Ingress for the API: `path` (`/api`) on `host` (any host when empty); `className`, `tls`, `annotations` |
 
 ## Labels
 

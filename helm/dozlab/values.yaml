@@ -71,41 +71,71 @@ controller:
 
 api:
   enabled: true
-  replicaCount: 2
+  # One replica: the node is small. The audit spool (below) is per pod.
+  replicaCount: 1
   image:
     repository: ghcr.io/dozlab/dozlab-api
     tag: ""
     pullPolicy: IfNotPresent
   port: 8080
-  # Non-secret settings, passed as env vars.
+  # Non-secret settings, passed as env vars. The API logs in as dozlab_app, which the migration
+  # hook creates with read and write on the tables only (dozlab-api cmd/migrate).
   env:
-    DB_HOST: postgres
+    DB_HOST: postgres.dozlab.svc
     DB_PORT: "5432"
     DB_NAME: dozlab
-    DB_USER: dozlab
-    REDIS_HOST: redis
-    REDIS_PORT: "6379"
+    DB_USER: dozlab_app
     GIN_MODE: release
-  # Required: an existing Secret loaded with envFrom. It must hold DB_PASSWORD,
-  # JWT_SECRET and RABBITMQ_URL, and may hold REDIS_PASSWORD. The chart never
-  # creates credentials.
+  # Required: an existing Secret loaded with envFrom. It must hold JWT_SECRET, DB_PASSWORD and
+  # RABBITMQ_URL, and may hold AUDIT_DATABASE_URL and AUDIT_READ_DATABASE_URL. The chart never
+  # creates credentials (the dozlab-secrets chart's ExternalSecret writes it).
   existingSecret: dozlab-api
+  # Where audit entries wait while the audit store is unreachable (AUDIT_SPOOL_DIR): an emptyDir,
+  # so a restarted pod loses entries that hadn't reached the store yet.
+  auditSpool:
+    sizeLimit: 256Mi
+  # cmd/migrate from the API image, as a Job before every install and upgrade (Helm hook): applies
+  # the SQL migrations and sets up the logins (dozlab_app, the audit store's). It connects as the
+  # Postgres superuser, whose password only this Job gets.
+  migrations:
+    enabled: true
+    # Required: PGPASSWORD (superuser), APP_DB_PASSWORD, AUDIT_OWNER_PASSWORD,
+    # AUDIT_WRITER_PASSWORD, AUDIT_READER_PASSWORD.
+    existingSecret: dozlab-api-migrate
+    env:
+      PGHOST: postgres.dozlab.svc
+      PGPORT: "5432"
+      PGUSER: postgres
+      PGSSLMODE: disable
+      DB_NAME: dozlab
+      APP_DB_USER: dozlab_app
+    backoffLimit: 2
+    activeDeadlineSeconds: 300
+    resources:
+      requests:
+        cpu: 50m
+        memory: 32Mi
+      limits:
+        memory: 128Mi
   service:
     type: ClusterIP
     port: 80
+  # Routes `path` (on `host`, or on any host when empty) to the API, unchanged: the API serves
+  # /api/v1. On k3s: className traefik, host empty, so the Funnel URL reaches it through Traefik.
   ingress:
     enabled: false
     className: ""
     annotations: {}
-    host: api.dozlab.local
+    host: ""
+    path: /api
     tls: []
   resources:
     requests:
-      cpu: 100m
-      memory: 128Mi
+      cpu: 50m
+      memory: 64Mi
     limits:
       cpu: "1"
-      memory: 512Mi
+      memory: 256Mi
   nodeSelector: {}
   tolerations: []
   affinity: {}
