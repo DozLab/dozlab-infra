@@ -1,9 +1,24 @@
 {{- if .Values.ghcrPull.enabled }}
 {{- $g := .Values.ghcrPull }}
-{{- range $i, $ns := $g.namespaces }}
-{{- if $i }}
----
+{{- $existing := lookup "v1" "Secret" .Values.sourceNamespace $g.sourceSecret }}
+# The source values. Created empty; on upgrade the values already in the cluster are rendered back
+# (lookup), so Helm never overwrites what was set by hand. Kept on uninstall.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ $g.sourceSecret }}
+  namespace: {{ .Values.sourceNamespace }}
+  labels:
+    {{- include "dozlab-secrets.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/resource-policy: keep
+type: Opaque
+{{- with (and $existing $existing.data) }}
+data:
+  {{- toYaml . | nindent 2 }}
 {{- end }}
+{{- range $ns := $g.namespaces }}
+---
 apiVersion: external-secrets.io/v1
 kind: ExternalSecret
 metadata:
@@ -27,11 +42,11 @@ spec:
   data:
     - secretKey: username
       remoteRef:
-        key: {{ $g.remoteKey }}
+        key: {{ $g.sourceSecret }}
         property: username
     - secretKey: token
       remoteRef:
-        key: {{ $g.remoteKey }}
+        key: {{ $g.sourceSecret }}
         property: token
 {{- end }}
 {{- end }}

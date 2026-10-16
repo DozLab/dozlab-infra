@@ -1,6 +1,6 @@
 apiVersion: v2
 name: dozlab-secrets
-description: DozLab secrets - OpenBao's namespace and generated keys, and the External Secrets Operator store and ExternalSecrets that read OpenBao
+description: DozLab secrets - a locked-down source namespace, and the External Secrets Operator store and ExternalSecrets that copy from it
 type: application
 # Chart version: bump on every chart change (SemVer). The release tag is dozlab-secrets-v<version>.
 version: 0.1.0
