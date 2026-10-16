@@ -26,7 +26,7 @@ Component objects use dozlab.componentLabels. */}}
 {{- define "dozlab.labels" -}}
 helm.sh/chart: {{ include "dozlab.chart" . }}
 app.kubernetes.io/part-of: dozlab
-app.kubernetes.io/version: {{ .Chart.Version | quote }}
+app.kubernetes.io/version: {{ .Chart.Version | replace "+" "_" | trunc 63 | quote }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{- end }}
 
