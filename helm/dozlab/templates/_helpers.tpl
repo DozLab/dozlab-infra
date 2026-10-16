@@ -68,13 +68,15 @@ app.kubernetes.io/version: {{ include "dozlab.imageTag" . | trunc 63 | quote }}
 {{- end }}
 
 {{/* Image reference; the tag defaults to the chart appVersion */}}
+{{/* Image tag and reference of a component; .imageComponent, when set, names the values key whose
+image it runs (the API migrations Job runs the API's image under its own component label). */}}
 {{- define "dozlab.imageTag" -}}
-{{- $img := index .ctx.Values .component "image" }}
+{{- $img := index .ctx.Values (default .component .imageComponent) "image" }}
 {{- default .ctx.Chart.AppVersion $img.tag }}
 {{- end }}
 
 {{- define "dozlab.image" -}}
-{{- $img := index .ctx.Values .component "image" }}
+{{- $img := index .ctx.Values (default .component .imageComponent) "image" }}
 {{- printf "%s:%s" $img.repository (include "dozlab.imageTag" .) }}
 {{- end }}
 

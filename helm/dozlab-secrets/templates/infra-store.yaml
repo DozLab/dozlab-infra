@@ -1,0 +1,58 @@
+{{- if .Values.api.enabled }}
+{{- $i := .Values.infra }}
+{{- $sa := .Values.store.readerServiceAccount }}
+# The reader may get the Postgres and RabbitMQ credentials in {{ $i.namespace }}, and nothing else there.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ $sa }}
+  namespace: {{ $i.namespace }}
+  labels:
+    {{- include "dozlab-secrets.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: [{{ $i.postgresSecret | quote }}, {{ $i.rabbitmqSecret | quote }}]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ $sa }}
+  namespace: {{ $i.namespace }}
+  labels:
+    {{- include "dozlab-secrets.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ $sa }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ $sa }}
+    namespace: {{ .Values.sourceNamespace }}
+---
+apiVersion: external-secrets.io/v1
+kind: ClusterSecretStore
+metadata:
+  name: {{ $i.storeName }}
+  labels:
+    {{- include "dozlab-secrets.labels" . | nindent 4 }}
+spec:
+  conditions:
+    - namespaces:
+        - {{ .Values.api.namespace }}
+  provider:
+    kubernetes:
+      remoteNamespace: {{ $i.namespace }}
+      server:
+        url: https://kubernetes.default.svc
+        caProvider:
+          type: ConfigMap
+          name: kube-root-ca.crt
+          key: ca.crt
+          namespace: {{ .Values.sourceNamespace }}
+      auth:
+        serviceAccount:
+          name: {{ $sa }}
+          namespace: {{ .Values.sourceNamespace }}
+{{- end }}

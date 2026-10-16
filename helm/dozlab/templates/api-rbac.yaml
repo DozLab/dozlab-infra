@@ -10,7 +10,7 @@ metadata:
     {{- include "dozlab.componentLabels" $c | nindent 4 }}
 ---
 {{- end }}
-# The API creates, reads and deletes LabSessions in labSessions.namespace only.
+# The API creates, reads, lists (usage) and deletes LabSessions in labSessions.namespace only.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
@@ -21,7 +21,7 @@ metadata:
 rules:
 - apiGroups: ["dozlab.io"]
   resources: ["labsessions"]
-  verbs: ["get", "create", "delete"]
+  verbs: ["get", "list", "create", "delete"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding

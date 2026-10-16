@@ -15,5 +15,8 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{- if .Values.ghcrPull.enabled }}
 {{- $ns = concat $ns .Values.ghcrPull.namespaces }}
 {{- end }}
+{{- if .Values.api.enabled }}
+{{- $ns = append $ns .Values.api.namespace }}
+{{- end }}
 {{- toYaml (uniq $ns) }}
 {{- end }}
